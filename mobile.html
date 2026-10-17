@@ -1,415 +1,415 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>试件送检清单｜手机版</title>
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<style>
-*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,-apple-system,"PingFang SC"}
-body{background:#f4f6f8;padding-bottom:90px;color:#222;}
-.topbar{
-  background:#fff;height:50px;display:flex;align-items:center;
-  padding:0 14px;border-bottom:1px solid #e5e7eb;position:sticky;top:0;z-index:10;
-}
-.topbar .title{font-weight:600;font-size:16px;}
-.topbar-right{margin-left:auto;display:flex;gap:8px;}
-.btn{
-  border:none;border-radius:6px;padding:7px 10px;font-size:13px;cursor:pointer;
-  background:#f2f5f8;border:1px solid #d0d5dd;
-}
-.btn-primary{background:#2563eb;color:#fff;border-color:#2563eb;}
-.btn-warn{background:#f97316;color:#fff;border-color:#f97316;}
-.btn-success{background:#16a34a;color:#fff;border-color:#16a34a;}
-
-.toolbar{
-  padding:12px;display:flex;gap:8px;flex-wrap:wrap;background:#fff;border-bottom:1px solid #eee;
-}
-.search-input{
-  flex:1;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:14px;min-width:120px;
-}
-.filter-select{padding:8px;border:1px solid #ddd;border-radius:6px;font-size:14px;}
-
-.stat-row{
-  display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;padding:12px;
-}
-.stat-card{background:#fff;padding:10px;border-radius:8px;text-align:center;}
-.stat-card .num{font-size:20px;font-weight:bold;}
-.stat-card .label{font-size:12px;color:#666;}
-.green{color:#16a34a;}
-.orange{color:#f59e0b;}
-.blue{color:#2563eb;}
-
-/* 扫码模块置顶 */
-.scan-wrap{
-  background:#fff;margin:12px;border-radius:10px;padding:12px;
-}
-.scan-box{
-  position:relative;background:#000;border-radius:8px;overflow:hidden;aspect-ratio:4/3;
-}
-.scan-box video{width:100%;height:100%;object-fit:cover;display:none;}
-.scan-placeholder{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#aaa;gap:8px;}
-.scan-frame{
-  position:absolute;inset:12px;border:2px solid rgba(37,99,235,0.7);border-radius:8px;pointer-events:none;display:none;
-}
-.scan-result{margin-top:10px;padding:10px;background:#f7fafc;border-radius:8px;}
-.scan-result .code{font-size:16px;font-weight:bold;}
-.scan-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
-
-/* 试件卡片列表 */
-.list-wrap{padding:0 12px;}
-.item-card{
-  background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;border:1px solid #eef0f3;
-}
-.item-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
-.item-code{font-weight:bold;font-size:16px;}
-.tag{padding:3px 8px;border-radius:12px;font-size:12px;}
-.tag-green{background:#e6f7ee;color:#16a34a;}
-.tag-orange{background:#fff7e6;color:#f59e0b;}
-.item-body{display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px;color:#444;}
-.item-footer{margin-top:10px;display:flex;justify-content:space-between;align-items:center;}
-.checkbox{width:22px;height:22px;accent-color:#2563eb;}
-.del-btn{color:#dc2626;background:none;border:none;font-size:13px;}
-
-/* 弹窗适配手机 */
-.modal-mask{
-  position:fixed;inset:0;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;z-index:100;
-}
-.modal-mask.show{display:flex;}
-.modal{
-  width:calc(100% - 24px);background:#fff;border-radius:10px;padding:16px;max-height:90vh;overflow-y:auto;
-}
-.modal h3{margin-bottom:12px;}
-.modal label{display:block;font-size:13px;margin:8px 0 3px;color:#444;}
-.modal input{width:100%;padding:9px;border:1px solid #ddd;border-radius:6px;font-size:16px;}
-.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;}
-
-.canvas{display:none;}
-.bottom-bar{
-  position:fixed;bottom:0;left:0;right:0;height:62px;background:#fff;border-top:1px solid #e5e7eb;
-  display:flex;align-items:center;justify-content:space-around;padding:0 10px;gap:8px;
-}
-</style>
+<meta name="theme-color" content="#17588f">
+<meta name="description" content="试件送检清单手机版：现场录入、扫码核验、一键归档。">
+<link rel="stylesheet" href="assets/style.css">
 </head>
-<body>
-<div class="topbar">
-  <div class="title">试件送检清单【手机版】</div>
-  <div class="topbar-right">
-    <button class="btn btn-primary" onclick="openAddModal()">新增</button>
+<body class="m-body">
+
+<div class="m-hero">
+  <div class="row">
+    <div class="mark" style="background:rgba(255,255,255,.16);box-shadow:none;width:34px;height:34px;border-radius:9px;font-size:14px">试</div>
+    <div>
+      <h1>试件送检清单【手机版】</h1>
+      <div class="sub" id="heroSub">工程项目 · 送检管理</div>
+    </div>
+    <button class="add" type="button" id="btnAdd">+ 新增</button>
   </div>
 </div>
 
-<div class="toolbar">
-  <input id="keyword" class="search-input" placeholder="试件编号搜索" />
-  <select id="filterStatus" class="filter-select">
-    <option value="all">全部</option>
-    <option value="checked">已确认</option>
-    <option value="wait">待核验</option>
-  </select>
-  <button class="btn" onclick="searchData()">查找</button>
+<div class="m-wrap">
+
+  <section class="m-card">
+    <div class="m-stats">
+      <div class="s"><div class="k">总数</div><div class="v" id="mTotal">0</div></div>
+      <div class="s ok"><div class="k">已确认</div><div class="v" id="mDone">0</div></div>
+      <div class="s warn"><div class="k">待核验</div><div class="v" id="mPending">0</div></div>
+    </div>
+  </section>
+
+  <div class="m-tabs" id="tabs">
+    <button type="button" data-status="" class="on">全部</button>
+    <button type="button" data-status="已确认">已确认</button>
+    <button type="button" data-status="待核验">待核验</button>
+    <button type="button" class="find" id="findToggle">🔍</button>
+  </div>
+  <div class="m-find" id="mFind">
+    <input class="inp inp-sm" id="mq" placeholder="试件编号 / 工程名称 / 芯片号">
+  </div>
+
+  <section class="m-card">
+    <div class="m-scanbar">
+      <div class="t">📷 扫码核验<span id="scanHint">对准芯片或二维码快速核验</span></div>
+      <button class="btn btn-sm btn-pri" type="button" id="btnScan">打开扫码</button>
+    </div>
+  </section>
+
+  <section class="m-card">
+    <div class="panel-h" style="padding:11px 14px">
+      <h2 style="font-size:14px" id="listTitle">送检清单</h2>
+      <div class="right"><span class="hint" id="listHint">共 0 条</span></div>
+    </div>
+    <div id="mList"></div>
+    <div id="emptyBox"></div>
+    <div class="tbl-foot" id="selBar" style="display:none">
+      <span id="selInfo"></span>
+      <div class="right"><button class="btn btn-sm btn-ghost" type="button" id="btnClearSel">清空</button></div>
+    </div>
+  </section>
+
+  <div style="text-align:center;font-size:11.5px;color:var(--ink-4);padding:6px 0 2px">
+    数据保存在本机浏览器 · <a href="desktop.html">电脑版</a> · <a href="archive.html">归档库</a>
+  </div>
 </div>
 
-<div class="stat-row">
-  <div class="stat-card">
-    <div class="num blue" id="totalNum">0</div>
-    <div class="label">总数</div>
-  </div>
-  <div class="stat-card">
-    <div class="num green" id="checkedNum">0</div>
-    <div class="label">已确认</div>
-  </div>
-  <div class="stat-card">
-    <div class="num orange" id="waitNum">0</div>
-    <div class="label">待核验</div>
-  </div>
+<div class="m-bottom">
+  <button type="button" id="btnArcSel"><span class="i">🗄</span>归档选中</button>
+  <a class="m-tab-link" href="archive.html"><span class="i">📁</span>归档库</a>
+  <button type="button" id="btnImp"><span class="i">📥</span>导入Excel</button>
+  <button type="button" id="btnExp"><span class="i">📤</span>导出Excel</button>
 </div>
 
-<div class="scan-wrap">
-  <h4 style="margin-bottom:10px;">📷 扫码核验</h4>
-  <div class="scan-box">
-    <video id="video" autoplay playsinline></video>
-    <div class="scan-placeholder" id="scanPlaceholder">点击开始扫码</div>
-    <div class="scan-frame" id="scanFrame"></div>
-  </div>
-  <div class="scan-result">
-    <p style="font-size:12px;color:#666;">识别编号</p>
-    <div class="code" id="scanCode">—</div>
-  </div>
-  <div class="scan-actions">
-    <button class="btn btn-primary" id="scanBtn" onclick="openScan()">开始扫码</button>
-    <button class="btn" id="stopBtn" onclick="closeScan()" style="display:none;">关闭</button>
-    <button class="btn btn-success" onclick="confirmScan()">确认核验</button>
-  </div>
-</div>
-
-<div class="list-wrap" id="cardList"></div>
-
-<div class="bottom-bar">
-  <button class="btn btn-warn" onclick="archiveSelected()">归档选中</button>
-  <button class="btn" onclick="window.open('archive.html','_blank')">归档库</button>
-  <button class="btn" onclick="document.getElementById('fileInputM').click()">导入Excel</button>
-  <input type="file" id="fileInputM" accept=".xlsx,.xls,.csv" style="display:none" onchange="importExcel(event)" />
-  <button class="btn" onclick="exportExcel()">导出Excel</button>
-</div>
-
-<canvas id="canvas" class="canvas"></canvas>
-
-<!-- 新增弹窗 -->
-<div class="modal-mask" id="addModal">
-  <div class="modal">
-    <h3>新增送检记录</h3>
-    <label>试件编号</label>
-    <input id="fCode" placeholder="试件编号">
-    <label>工程名称</label>
-    <input id="fProject" placeholder="工程名称">
-    <label>规格型号</label>
-    <input id="fSpec" placeholder="C30 150×150">
-    <label>养护类型</label>
-    <input id="fCureType" placeholder="标养/同养">
-    <label>成型日期</label>
-    <input id="fFormDate" type="date">
-    <label>送检日期</label>
-    <input id="fSendDate" type="date">
-    <label>芯片号1</label>
-    <input id="fChip1">
-    <label>芯片号2</label>
-    <input id="fChip2">
-    <label>芯片号3</label>
-    <input id="fChip3">
-    <div class="modal-actions">
-      <button class="btn" onclick="closeAddModal()">取消</button>
-      <button class="btn btn-primary" onclick="addRow()">保存</button>
+<!-- 新增 / 编辑 -->
+<div class="modal" id="formModal">
+  <div class="modal-box" style="max-width:520px">
+    <div class="modal-h">
+      <h3 id="mTitle">新增送检记录</h3>
+      <button class="icon-btn x" type="button" data-close="formModal">✕</button>
+    </div>
+    <div class="modal-b">
+      <div class="field" style="margin-bottom:12px"><label for="fCode">试件编号 <span class="req">*</span></label><input class="inp" id="fCode" placeholder="如 SP-20261017-01"></div>
+      <div class="field" style="margin-bottom:12px"><label for="fProject">工程名称 <span class="req">*</span></label><input class="inp" id="fProject" placeholder="如 滨江花园二期 3# 楼"></div>
+      <div class="field" style="margin-bottom:12px"><label for="fSpec">规格型号</label><input class="inp" id="fSpec" placeholder="如 150×150×150mm"></div>
+      <div class="field" style="margin-bottom:12px"><label for="fCure">养护类型</label><select class="inp" id="fCure"></select></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div class="field"><label for="fMade">成型日期</label><input class="inp" type="date" id="fMade"></div>
+        <div class="field"><label for="fSend">送检日期</label><input class="inp" type="date" id="fSend"></div>
+      </div>
+      <div class="field" style="margin-bottom:12px"><label for="fChip1">芯片号1</label><input class="inp" id="fChip1" placeholder="扫码或手填"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div class="field"><label for="fChip2">芯片号2</label><input class="inp" id="fChip2" placeholder="可不填"></div>
+        <div class="field"><label for="fChip3">芯片号3</label><input class="inp" id="fChip3" placeholder="可不填"></div>
+      </div>
+      <div class="field"><label for="fRemark">备注</label><input class="inp" id="fRemark" placeholder="可不填"></div>
+      <div style="font-size:12px;color:var(--bad);margin-top:10px;min-height:16px" id="formErr"></div>
+    </div>
+    <div class="modal-f">
+      <button class="btn" type="button" data-close="formModal">取消</button>
+      <button class="btn btn-pri" type="button" id="btnSave">保存</button>
     </div>
   </div>
 </div>
 
+<!-- 扫码 -->
+<div class="modal" id="scanModal">
+  <div class="modal-box" style="max-width:480px">
+    <div class="modal-h">
+      <h3>📷 扫码核验</h3>
+      <button class="icon-btn x" type="button" data-close="scanModal">✕</button>
+    </div>
+    <div class="modal-b">
+      <div class="scan-stage" style="aspect-ratio:3/4">
+        <div class="ph" id="scanPh"><span class="big">📷</span>点击「开始扫码」调用摄像头</div>
+        <video id="video" playsinline muted style="display:none"></video>
+        <div class="scan-frame" id="scanFrame" style="display:none"></div>
+      </div>
+      <div class="scan-code" style="margin-top:12px">
+        <div class="k">当前识别编号</div>
+        <div class="v idle" id="scanCode">—</div>
+      </div>
+      <div class="manual" style="margin-top:10px">
+        <input class="inp inp-sm" id="manualCode" placeholder="也可手动输入芯片号">
+        <button class="btn btn-sm" type="button" id="btnFill">填入</button>
+      </div>
+      <div class="scan-status" id="scanStatus" style="margin-top:8px">摄像头未开启</div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn btn-pri" type="button" id="btnStart" style="flex:1">开始扫码</button>
+        <button class="btn" type="button" id="btnStop">关闭</button>
+        <button class="btn" type="button" id="btnConfirm">确认核验</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="assets/store.js"></script>
+<script src="assets/cloud.js"></script>
+<script src="assets/ui.js"></script>
+<script src="assets/scan.js"></script>
 <script>
-  let dataList = JSON.parse(localStorage.getItem("sampleCheckList")) || [];
-  let archiveList = JSON.parse(localStorage.getItem("sampleArchiveList")) || [];
-  let scanStream = null;
-  const video = document.getElementById("video");
-  const canvas = document.getElementById("canvas");
-  const ctx = canvas.getContext("2d");
+(function () {
+  'use strict';
+  var Store = window.SampleStore, U = window.UI, $ = U.$, $$ = U.$$;
+  var state = { status: '', q: '' };
+  var selected = {};
+  var editingId = '';
+  var scanHandle = null, lastCode = '';
 
-  function saveData() {localStorage.setItem("sampleCheckList", JSON.stringify(dataList));}
-  function saveArchive(){localStorage.setItem("sampleArchiveList", JSON.stringify(archiveList));}
+  function el(id) { return document.getElementById(id); }
+  function v(id) { return el(id).value.trim(); }
 
-  function renderCardList(){
-    const keyword = document.getElementById("keyword").value.trim().toLowerCase();
-    const filter = document.getElementById("filterStatus").value;
-    const wrap = document.getElementById("cardList");
-    wrap.innerHTML="";
-    const filtered = dataList.map((item,idx)=>({item,idx})).filter(({item})=>{
-      if(filter==="checked" && !item.checked) return false;
-      if(filter==="wait" && item.checked) return false;
-      if(keyword && !item.code.toLowerCase().includes(keyword)) return false;
-      return true;
-    });
-    if(filtered.length===0){
-      wrap.innerHTML = `<div style="text-align:center;padding:30px;color:#777;">暂无试件记录</div>`;
-    }
-    filtered.forEach(({item,idx})=>{
-      const card = document.createElement("div");
-      card.className="item-card";
-      card.innerHTML=`
-      <div class="item-head">
-        <div class="item-code">${item.code||""}</div>
-        <span class="${item.checked?'tag tag-green':'tag tag-orange'}">${item.checked?"已确认":"待核验"}</span>
-      </div>
-      <div class="item-body">
-        <div>工程：${item.project||""}</div>
-        <div>规格：${item.spec||""}</div>
-        <div>养护：${item.cureType||""}</div>
-        <div>成型：${item.formDate||""}</div>
-        <div>送检：${item.sendDate||""}</div>
-        <div>芯片1：${item.chip1||""}</div>
-        <div>芯片2：${item.chip2||""}</div>
-        <div>芯片3：${item.chip3||""}</div>
-      </div>
-      <div class="item-footer">
-        <label><input type="checkbox" class="checkbox row-checkbox" data-idx="${idx}"> 选中归档</label>
-        <button class="del-btn" onclick="deleteRow(${idx})">删除</button>
-      </div>
-      `;
-      wrap.appendChild(card);
-    })
-    renderStats();
-  }
+  Store.CURES.forEach(function (c) {
+    var o = document.createElement('option'); o.value = c; o.textContent = c;
+    el('fCure').appendChild(o);
+  });
+  el('heroSub').textContent = U.nowText().slice(0, 10) + ' · 现场送检';
 
-  function renderStats(){
-    document.getElementById("totalNum").textContent = dataList.length;
-    document.getElementById("checkedNum").textContent = dataList.filter(i=>i.checked).length;
-    document.getElementById("waitNum").textContent = dataList.filter(i=>!i.checked).length;
-  }
+  function render() {
+    var list = Store.all(state);
+    var st = Store.stats();
+    el('mTotal').textContent = st.total;
+    el('mDone').textContent = st.done;
+    el('mPending').textContent = st.pending;
+    el('listHint').textContent = '共 ' + list.length + ' 条';
+    el('listTitle').textContent = state.status ? state.status + '记录' : '送检清单';
 
-  function archiveSelected(){
-    const selected = [];
-    document.querySelectorAll(".row-checkbox:checked").forEach(cb=>{
-      const idx = Number(cb.dataset.idx);
-      selected.push(idx);
-    })
-    if(selected.length===0){alert("勾选要归档的试件");return;}
-    selected.sort((a,b)=>b-a).forEach(idx=>{
-      archiveList.push(dataList[idx]);
-      dataList.splice(idx,1);
-    })
-    saveData();saveArchive();renderCardList();
-    alert(`归档${selected.length}条记录`);
-  }
+    var box = el('mList');
+    box.innerHTML = list.map(function (r) {
+      var isSel = !!selected[r.id];
+      var badge = r.status === '已确认' ? '<span class="badge ok">已确认</span>' : '<span class="badge warn">待核验</span>';
+      return '<div class="m-rec" data-id="' + r.id + '">' +
+        '<input class="chk rowChk" type="checkbox" ' + (isSel ? 'checked' : '') + ' style="margin-top:3px">' +
+        '<div class="l" data-act="edit">' +
+          '<div class="t1">' + U.esc(r.code || '未编号') + badge + '</div>' +
+          '<div class="t2">' + U.esc(r.project || '—') + ' · ' + U.esc(r.cure || '—') + '</div>' +
+          '<div class="t3">' + U.esc(r.spec || '') + (r.chip1 ? ' · ' + U.esc(r.chip1) : '') + '</div>' +
+          '<div class="t3">成型 ' + U.esc(r.madeDate || '—') + ' · 送检 ' + U.esc(r.sendDate || '—') + '</div>' +
+        '</div>' +
+        (r.status !== '已确认'
+          ? '<button class="btn btn-sm" data-act="confirm" type="button" style="align-self:center">核验</button>'
+          : '<button class="icon-btn" data-act="archive" type="button" style="align-self:center" title="归档">⬇</button>') +
+      '</div>';
+    }).join('');
 
-  function openAddModal(){
-    document.getElementById("addModal").classList.add("show");
-    const today = new Date().toISOString().slice(0,10);
-    if(!document.getElementById("fFormDate").value) document.getElementById("fFormDate").value = today;
-    if(!document.getElementById("fSendDate").value) document.getElementById("fSendDate").value = today;
-  }
-  function closeAddModal(){document.getElementById("addModal").classList.remove("show");}
-
-  function addRow(){
-    const code = document.getElementById("fCode").value.trim();
-    const project = document.getElementById("fProject").value.trim();
-    const spec = document.getElementById("fSpec").value.trim();
-    const cureType = document.getElementById("fCureType").value.trim();
-    const formDate = document.getElementById("fFormDate").value;
-    const sendDate = document.getElementById("fSendDate").value;
-    const chip1 = document.getElementById("fChip1").value.trim();
-    const chip2 = document.getElementById("fChip2").value.trim();
-    const chip3 = document.getElementById("fChip3").value.trim();
-    if(!code){alert("试件编号不能为空");return;}
-    if(dataList.some(x=>x.code===code)){alert("试件编号已存在");return;}
-    dataList.push({code,project,spec,cureType,formDate,sendDate,chip1,chip2,chip3,checked:false});
-    saveData();renderCardList();closeAddModal();
-    document.getElementById("fCode").value="";document.getElementById("fProject").value="";document.getElementById("fSpec").value="";
-    document.getElementById("fCureType").value="";document.getElementById("fFormDate").value="";document.getElementById("fSendDate").value="";
-    document.getElementById("fChip1").value="";document.getElementById("fChip2").value="";document.getElementById("fChip3").value="";
-  }
-  function deleteRow(idx){
-    if(!confirm("删除这条试件？"))return;
-    dataList.splice(idx,1);
-    saveData();renderCardList();
-  }
-  function searchData(){renderCardList();}
-
-  function openScan(){
-    const ph = document.getElementById("scanPlaceholder");
-    ph.style.display="none";video.style.display="block";
-    document.getElementById("scanFrame").style.display="block";
-    document.getElementById("scanBtn").style.display="none";
-    document.getElementById("stopBtn").style.display="inline-block";
-    navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}})
-    .then(stream=>{
-      scanStream = stream;
-      video.srcObject = stream;
-      scanLoop();
-    }).catch(e=>{alert("无法打开摄像头，需要HTTPS");closeScan();})
-  }
-  function closeScan(){
-    if(scanStream) scanStream.getTracks().forEach(t=>t.stop());
-    scanStream=null;
-    video.style.display="none";
-    document.getElementById("scanPlaceholder").style.display="flex";
-    document.getElementById("scanFrame").style.display="none";
-    document.getElementById("scanBtn").style.display="inline-block";
-    document.getElementById("stopBtn").style.display="none";
-  }
-  function scanLoop(){
-    if(!scanStream) return;
-    canvas.width = video.videoWidth||480;canvas.height=video.videoHeight||640;
-    ctx.drawImage(video,0,0,canvas.width,canvas.height);
-    const imgData = ctx.getImageData(0,0,canvas.width,canvas.height);
-    const qr = jsQR(imgData.data,canvas.width,canvas.height);
-    if(qr){
-      document.getElementById("scanCode").textContent = qr.data;
-      document.getElementById("keyword").value = qr.data;
-      let cnt = Number(localStorage.getItem("scanCount")||0);
-      localStorage.setItem("scanCount",cnt+1);
-      closeScan();return;
-    }
-    requestAnimationFrame(scanLoop);
-  }
-  function confirmScan(){
-    const code = document.getElementById("scanCode").textContent;
-    if(code==="—"){alert("请扫码");return;}
-    const idx = dataList.findIndex(i=>i.code===code);
-    if(idx===-1){alert("找不到试件编号");return;}
-    dataList[idx].checked=true;
-    saveData();renderCardList();
-    alert(`核验完成：${code}`);
-  }
-  function exportCSV(){
-    if(dataList.length===0){alert("暂无数据");return;}
-    let text = "序号,试件编号,工程名称,规格型号,养护类型,成型日期,送检日期,芯片号1,芯片号2,芯片号3,核验状态\n";
-    dataList.forEach((item,i)=>{
-      text += `${i+1},${item.code||""},${item.project||""},${item.spec||""},${item.cureType||""},${item.formDate||""},${item.sendDate||""},${item.chip1||""},${item.chip2||""},${item.chip3||""},${item.checked?"已确认":"待核验"}\n`;
-    })
-    const blob = new Blob(["\uFEFF"+text],{type:"text/csv;charset=utf-8"});
-    const a = document.createElement("a");
-    a.href=URL.createObjectURL(blob);a.download="试件送检清单_手机版.csv";a.click();
-  }
-  // 导出Excel(.xlsx)
-  function exportExcel(){
-    if(dataList.length===0){alert("暂无数据");return;}
-    const rows = dataList.map((item,i)=>({
-      "序号": i+1,
-      "试件编号": item.code||"",
-      "工程名称": item.project||"",
-      "规格型号": item.spec||"",
-      "养护类型": item.cureType||"",
-      "成型日期": item.formDate||"",
-      "送检日期": item.sendDate||"",
-      "芯片号1": item.chip1||"",
-      "芯片号2": item.chip2||"",
-      "芯片号3": item.chip3||"",
-      "核验状态": item.checked?"已确认":"待核验"
-    }));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "送检清单");
-    XLSX.writeFile(wb, "试件送检清单.xlsx");
-  }
-  // 从Excel/CSV导入
-  function importExcel(event){
-    const file = event.target.files[0];
-    if(!file) return;
-    const reader = new FileReader();
-    reader.onload = function(e){
-      try {
-        const wb = XLSX.read(e.target.result, {type:"array"});
-        const sheet = wb.Sheets[wb.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(sheet, {defval:""});
-        if(rows.length===0){alert("文件中没有数据");return;}
-        let added = 0, skipped = 0;
-        rows.forEach(row=>{
-          const code = String(row["试件编号"]||row["编号"]||row["code"]||"").trim();
-          if(!code) return;
-          if(dataList.some(i=>i.code===code)){skipped++;return;}
-          dataList.push({
-            code: code,
-            project: String(row["工程名称"]||row["工程"]||row["project"]||"").trim(),
-            spec: String(row["规格型号"]||row["规格"]||row["spec"]||"").trim(),
-            cureType: String(row["养护类型"]||row["养护"]||row["cureType"]||"").trim(),
-            formDate: String(row["成型日期"]||row["formDate"]||"").trim(),
-            sendDate: String(row["送检日期"]||row["sendDate"]||"").trim(),
-            chip1: String(row["芯片号1"]||row["芯片1"]||row["chip1"]||"").trim(),
-            chip2: String(row["芯片号2"]||row["芯片2"]||row["chip2"]||"").trim(),
-            chip3: String(row["芯片号3"]||row["芯片3"]||row["chip3"]||"").trim(),
-            checked: false
-          });
-          added++;
-        });
-        saveData();renderCardList();
-        alert(`导入完成：新增 ${added} 条，跳过重复/空编号 ${skipped} 条`);
-      } catch(err){
-        alert("导入失败，请确认文件格式。表头需包含：试件编号、工程名称、规格型号、养护类型、成型日期、送检日期、芯片号1、芯片号2、芯片号3");
-      }
+    el('emptyBox').innerHTML = list.length ? '' :
+      '<div class="empty" style="padding:38px 16px"><div class="ico">▤</div><h3>暂无记录</h3>' +
+      '<p>' + (Store.all({ archived: false }).length ? '当前筛选下没有记录。' : '点右上角「+ 新增」录入，或从 Excel 导入。') + '</p>' +
+      '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">' +
+      '<button class="btn btn-sm" type="button" id="btnSeed">载入演示数据</button>' +
+      '<button class="btn btn-sm btn-pri" type="button" id="btnAdd2">+ 新增记录</button></div></div>';
+    if (el('btnSeed')) el('btnSeed').onclick = function () {
+      var n = Store.seed(); U.toast(n ? '已载入 ' + n + ' 条演示数据' : '已有数据', 'ok'); render();
     };
-    reader.readAsArrayBuffer(file);
-    event.target.value = "";
+    if (el('btnAdd2')) el('btnAdd2').onclick = openAdd;
+
+    bind();
+    updateSel();
   }
-  document.getElementById("keyword").addEventListener("input",renderCardList);
-  document.getElementById("filterStatus").addEventListener("change",renderCardList);
-  renderCardList();
+
+  function bind() {
+    $$('#mList .m-rec').forEach(function (row) {
+      var id = row.getAttribute('data-id');
+      row.querySelector('.rowChk').addEventListener('change', function (e) {
+        if (e.target.checked) selected[id] = true; else delete selected[id];
+        updateSel();
+      });
+      $$('[data-act]', row).forEach(function (b) {
+        b.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var act = b.getAttribute('data-act');
+          if (act === 'edit') openEdit(id);
+          else if (act === 'confirm') {
+            var r = Store.confirm(id);
+            if (r) { Store.logScan(r.chip1 || r.code, true, r.id); U.toast('已确认：' + r.code, 'ok'); render(); }
+          } else if (act === 'archive') {
+            var rec = Store.get(id);
+            if (confirm('把 ' + (rec ? rec.code : '该记录') + ' 移入归档库？')) { Store.archive([id]); delete selected[id]; U.toast('已归档', 'ok'); render(); }
+          }
+        });
+      });
+    });
+  }
+
+  function updateSel() {
+    var n = Object.keys(selected).filter(function (k) { return selected[k]; }).length;
+    el('selBar').style.display = n ? 'flex' : 'none';
+    el('selInfo').innerHTML = '<span class="sel-info">已选 ' + n + ' 条</span>';
+  }
+
+  /* 表单 */
+  function openAdd() {
+    editingId = '';
+    el('mTitle').textContent = '新增送检记录';
+    ['fCode', 'fProject', 'fSpec', 'fChip1', 'fChip2', 'fChip3', 'fRemark'].forEach(function (id) { el(id).value = ''; });
+    el('fCure').value = '标准养护';
+    el('fMade').value = Store.today(); el('fSend').value = Store.today();
+    el('formErr').textContent = '';
+    el('formModal').classList.add('show');
+  }
+  function openEdit(id) {
+    var r = Store.get(id); if (!r) return;
+    editingId = r.id;
+    el('mTitle').textContent = '编辑送检记录';
+    el('fCode').value = r.code; el('fProject').value = r.project; el('fSpec').value = r.spec;
+    el('fCure').value = r.cure || '标准养护';
+    el('fMade').value = r.madeDate; el('fSend').value = r.sendDate;
+    el('fChip1').value = r.chip1; el('fChip2').value = r.chip2; el('fChip3').value = r.chip3;
+    el('fRemark').value = r.remark;
+    el('formErr').textContent = '';
+    el('formModal').classList.add('show');
+  }
+  function saveForm() {
+    if (!v('fCode') || !v('fProject')) {
+      el('formErr').textContent = '请填写试件编号和工程名称';
+      if (!v('fCode')) el('fCode').classList.add('err');
+      if (!v('fProject')) el('fProject').classList.add('err');
+      return;
+    }
+    var chips = [v('fChip1'), v('fChip2'), v('fChip3')].map(Store.normCode).filter(Boolean);
+    var msg = '';
+    chips.forEach(function (c) {
+      var o = Store.chipOwner(c, editingId);
+      if (o && !msg) msg = c + ' 已绑定到 ' + (o.code || o.project);
+    });
+    if (msg && !confirm(msg + '\n\n仍要保存？')) return;
+    var rec = {
+      id: editingId, code: v('fCode'), project: v('fProject'), spec: v('fSpec'),
+      cure: el('fCure').value, madeDate: v('fMade'), sendDate: v('fSend'),
+      chip1: v('fChip1'), chip2: v('fChip2'), chip3: v('fChip3'), remark: v('fRemark')
+    };
+    if (editingId) {
+      var old = Store.get(editingId);
+      rec.status = old ? old.status : '待核验';
+      rec.confirmedAt = old ? old.confirmedAt : '';
+    }
+    if (!Store.save(rec)) { el('formErr').textContent = '保存失败'; return; }
+    el('formModal').classList.remove('show');
+    U.toast(editingId ? '已保存修改' : '已新增 1 条', 'ok');
+    render();
+  }
+
+  /* 扫码 */
+  function setCode(c) {
+    lastCode = c || '';
+    var n = el('scanCode');
+    n.textContent = c || '—';
+    n.className = 'v' + (c ? '' : ' idle');
+  }
+  function setStatus(m, cls) {
+    var n = el('scanStatus');
+    n.textContent = m; n.className = 'scan-status' + (cls ? ' ' + cls : '');
+  }
+  function startScan() {
+    if (scanHandle) { scanHandle.stop(); scanHandle = null; }
+    el('video').style.display = 'block';
+    el('scanPh').style.display = 'none';
+    el('scanFrame').style.display = 'block';
+    setStatus('正在启动摄像头…');
+    scanHandle = Scanner.start(el('video'), function (code) {
+      setCode(code);
+      var hit = Store.findByCode(code);
+      if (!hit) setStatus('识别到 ' + code + '，清单中没有对应记录', 'err');
+      else if (hit.status === '已确认') setStatus('匹配：' + hit.code + '（已确认）', 'ok');
+      else setStatus('匹配：' + hit.code + '，点「确认核验」', 'ok');
+    }, function (s) {
+      if (s === 'running') setStatus('摄像头已开启，对准芯片', 'ok');
+      else if (s === 'denied') setStatus('摄像头权限被拒绝，请允许后重试，或手动输入', 'err');
+      else if (s === 'nocamera') setStatus('没有可用摄像头，请手动输入编号', 'err');
+      else if (s === 'unsupported') setStatus('当前浏览器不支持调用摄像头，请手动输入', 'err');
+      else if (s === 'fallback-manual') setStatus('扫码组件加载失败（需联网），请手动输入', 'err');
+    });
+  }
+  function stopScan() {
+    if (scanHandle) { scanHandle.stop(); scanHandle = null; }
+    el('video').style.display = 'none';
+    el('scanPh').style.display = 'block';
+    el('scanFrame').style.display = 'none';
+    setStatus('摄像头已关闭');
+  }
+  function doConfirm() {
+    var code = v('manualCode') || lastCode;
+    if (!code) { U.toast('还没有识别到编号', 'err'); return; }
+    var hit = Store.findByCode(code);
+    if (!hit) { Store.logScan(code, false, ''); setStatus('未找到编号 ' + code, 'err'); U.toast('未找到匹配记录', 'err'); return; }
+    if (hit.status === '已确认') { setStatus(hit.code + ' 已确认过', 'ok'); U.toast('该试件已确认', 'ok'); render(); return; }
+    Store.confirm(hit.id);
+    Store.logScan(code, true, hit.id);
+    setStatus('核验成功：' + hit.code, 'ok');
+    U.toast('核验成功：' + hit.code, 'ok');
+    setCode(''); el('manualCode').value = '';
+    render();
+  }
+
+  /* 事件 */
+  el('btnAdd').onclick = openAdd;
+  el('btnSave').onclick = saveForm;
+  el('btnScan').onclick = function () {
+    el('scanModal').classList.add('show');
+    setCode(''); setStatus('点击「开始扫码」调用摄像头');
+  };
+  el('btnStart').onclick = startScan;
+  el('btnStop').onclick = stopScan;
+  el('btnConfirm').onclick = doConfirm;
+  el('btnFill').onclick = function () {
+    if (!v('manualCode')) { U.toast('请输入编号', 'err'); return; }
+    setCode(Store.normCode(v('manualCode')));
+    setStatus('已填入 ' + lastCode);
+  };
+  el('manualCode').addEventListener('keydown', function (e) { if (e.key === 'Enter') doConfirm(); });
+
+  $$('#tabs [data-status]').forEach(function (b) {
+    b.onclick = function () {
+      $$('#tabs [data-status]').forEach(function (x) { x.classList.remove('on'); });
+      b.classList.add('on');
+      state.status = b.getAttribute('data-status');
+      render();
+    };
+  });
+  el('findToggle').onclick = function () { el('mFind').classList.toggle('show'); if (el('mFind').classList.contains('show')) el('mq').focus(); };
+  var qt = null;
+  el('mq').addEventListener('input', function () {
+    clearTimeout(qt);
+    qt = setTimeout(function () { state.q = el('mq').value; render(); }, 180);
+  });
+
+  el('btnArcSel').onclick = function () {
+    var ids = Object.keys(selected).filter(function (k) { return selected[k]; });
+    if (!ids.length) { U.toast('请先勾选记录', 'err'); return; }
+    if (!confirm('归档选中的 ' + ids.length + ' 条？')) return;
+    var n = Store.archive(ids); selected = {};
+    U.toast('已归档 ' + n + ' 条', 'ok'); render();
+  };
+  el('btnClearSel').onclick = function () { selected = {}; render(); };
+  el('btnImp').onclick = function () {
+    U.pickFile('.csv,.xlsx,.xls', function (f) {
+      U.readRows(f).then(function (rows) {
+        var res = Store.importRows(rows);
+        U.toast(res.msg, res.ok ? 'ok' : 'err');
+        if (res.ok) render();
+      }).catch(function (e) { U.toast(e.message || '导入失败', 'err'); });
+    });
+  };
+  el('btnExp').onclick = function () {
+    var list = Store.all(state);
+    if (!list.length) { U.toast('没有可导出的记录', 'err'); return; }
+    U.exportExcel(list, '试件送检清单_' + Store.today() + '.xls', '试件送检清单（' + Store.today() + '）');
+    U.toast('已导出 ' + list.length + ' 条', 'ok');
+  };
+
+  $$('[data-close]').forEach(function (b) {
+    b.onclick = function () {
+      var id = b.getAttribute('data-close');
+      el(id).classList.remove('show');
+      if (id === 'scanModal') stopScan();
+    };
+  });
+  ['formModal', 'scanModal'].forEach(function (mid) {
+    el(mid).addEventListener('click', function (e) {
+      if (e.target === el(mid)) { el(mid).classList.remove('show'); if (mid === 'scanModal') stopScan(); }
+    });
+  });
+
+  render();
+
+  /* 云端同步：从飞书拉到数据后自动重绘 */
+  document.addEventListener('cloud:updated', function () { render(); });
+  if (window.SampleCloud) window.SampleCloud.start({ onUpdate: render });
+})();
 </script>
 </body>
 </html>

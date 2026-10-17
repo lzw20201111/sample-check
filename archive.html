@@ -1,220 +1,223 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>试件归档库｜自适应</title>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<meta name="description" content="试件归档库：查看已归档的送检记录，可撤回至主清单、导出 Excel/CSV。">
+<link rel="stylesheet" href="assets/style.css">
 <style>
-  * {
-    box-sizing: border-box;
-    margin:0;
-    padding:0;
-    font-family: "Microsoft YaHei", "PingFang SC", system-ui;
-  }
-  body{
-    background:#f4f6f8;
-    padding:16px;
-  }
-  .container{
-    background:#fff;
-    border-radius:10px;
-    border:1px solid #e5e7eb;
-    padding:16px;
-  }
-  .top-bar{
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    margin-bottom:16px;
-    flex-wrap:wrap;gap:10px;
-  }
-  h2{
-    font-size:18px;
-  }
-  .btn{
-    padding:8px 12px;
-    border-radius:6px;
-    border:1px solid #d0d5dd;
-    background:#f2f5f8;
-    cursor:pointer;
-    font-size:13px;
-  }
-  .btn-primary{
-    background:#2563eb;
-    color:#fff;
-    border-color:#2563eb;
-  }
-  .btn-success{
-    background:#16a34a;
-    color:#fff;
-    border-color:#16a34a;
-  }
-  .table-wrap{overflow:auto;}
-  table{
-    width:100%;
-    border-collapse:collapse;
-    font-size:13px;
-  }
-  th{
-    background:#f7fafc;
-    text-align:left;
-    padding:10px 8px;
-    border-bottom:1px solid #eef0f3;
-    white-space:nowrap;
-  }
-  td{
-    padding:10px 8px;
-    border-bottom:1px solid #f2f4f7;
-    white-space:nowrap;
-  }
-  .checkbox{
-    width:18px;height:18px;
-    accent-color:#2563eb;
-  }
-  .tag-green{
-    background:#e6f7ee;color:#16a34a;
-    padding:2px 8px;border-radius:10px;font-size:12px;
-  }
-  .tag-orange{
-    background:#fff7e6;color:#f59e0b;
-    padding:2px 8px;border-radius:10px;font-size:12px;
-  }
-  @media(max-width:720px){
-    body{padding:8px;}
-    .container{padding:12px;}
-  }
+  .m-list { display: none; }
+  .m-list .mrow { padding: 12px 14px; border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: flex-start; }
+  .m-list .mrow:last-child { border-bottom: 0; }
+  .m-list .mrow .l { flex: 1; min-width: 0; }
+  .m-list .mrow .t1 { font-size: 14px; font-weight: 700; color: var(--pri); font-family: ui-monospace, Menlo, monospace; }
+  .m-list .mrow .t2 { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
+  .m-list .mrow .t3 { font-size: 11.5px; color: var(--ink-4); margin-top: 2px; }
+  @media (max-width: 760px) { .table-wrap { display: none; } .m-list { display: block; } }
 </style>
 </head>
 <body>
-<div class="container">
-  <div class="top-bar">
-    <h2>📁 试件归档库</h2>
-    <div>
-      <button class="btn btn-success" onclick="rollbackSelected()">撤回选中至主清单</button>
-      <button class="btn btn-primary" onclick="exportArchiveExcel()">导出Excel</button>
-      <button class="btn" onclick="exportArchiveCSV()">导出CSV</button>
-      <button class="btn" onclick="window.close()">关闭页面</button>
+
+<header class="arch-top">
+  <div class="in">
+    <h1>📁 试件归档库</h1>
+    <span class="tag">自适应</span>
+    <span class="hint" id="hint" style="font-size:12.5px;color:var(--ink-3)">共 0 条</span>
+    <div class="acts">
+      <button class="btn btn-sm" type="button" id="btnRestore">撤回选中至主清单</button>
+      <button class="btn btn-sm" type="button" id="btnExcel">导出Excel</button>
+      <button class="btn btn-sm" type="button" id="btnCsv">导出CSV</button>
+      <button class="btn btn-sm" type="button" id="btnClose">关闭页面</button>
     </div>
   </div>
-  <div class="table-wrap">
-  <table>
-    <thead>
-      <tr>
-        <th><input type="checkbox" id="archiveCheckAll" class="checkbox" onchange="archiveToggleAll()"></th>
-        <th>序号</th>
-        <th>试件编号</th>
-        <th>工程名称</th>
-        <th>规格型号</th>
-        <th>养护类型</th>
-        <th>成型日期</th>
-        <th>送检日期</th>
-        <th>芯片号1</th>
-        <th>芯片号2</th>
-        <th>芯片号3</th>
-        <th>核验状态</th>
-      </tr>
-    </thead>
-    <tbody id="archiveBody"></tbody>
-  </table>
-  </div>
-</div>
+</header>
+
+<main class="arch-wrap">
+  <section class="panel">
+    <div class="panel-h">
+      <h2>归档记录</h2>
+      <span class="hint">已从送检清单移出的记录，可随时撤回</span>
+      <div class="right">
+        <label style="font-size:12.5px;color:var(--ink-3);display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input class="chk" type="checkbox" id="chkAll"> 全选
+        </label>
+        <a class="btn btn-sm" href="desktop.html">返回清单</a>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="grid">
+        <thead>
+          <tr>
+            <th style="width:38px"></th>
+            <th style="width:52px">序号</th>
+            <th>试件编号</th>
+            <th>工程名称</th>
+            <th>规格型号</th>
+            <th>养护类型</th>
+            <th>成型日期</th>
+            <th>送检日期</th>
+            <th>芯片号1</th>
+            <th>芯片号2</th>
+            <th>芯片号3</th>
+            <th>核验状态</th>
+            <th class="act" style="width:86px">操作</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="m-list" id="mList"></div>
+    <div id="emptyBox"></div>
+
+    <div class="tbl-foot">
+      <span id="selInfo">未选择记录</span>
+      <div class="right">
+        <button class="btn btn-sm" type="button" id="btnRestore2">撤回选中</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script src="assets/store.js"></script>
+<script src="assets/cloud.js"></script>
+<script src="assets/ui.js"></script>
 <script>
-  let archiveList = JSON.parse(localStorage.getItem("sampleArchiveList")) || [];
-  let mainList = JSON.parse(localStorage.getItem("sampleCheckList")) || [];
+(function () {
+  'use strict';
+  var Store = window.SampleStore, U = window.UI, $ = U.$, $$ = U.$$;
+  var selected = {};
 
-  function saveArchive(){
-    localStorage.setItem("sampleArchiveList", JSON.stringify(archiveList));
-  }
-  function saveMain(){
-    localStorage.setItem("sampleCheckList", JSON.stringify(mainList));
-  }
+  function el(id) { return document.getElementById(id); }
 
-  function renderArchive(){
-    const tb = document.getElementById("archiveBody");
-    tb.innerHTML = "";
-    if(archiveList.length ===0){
-      tb.innerHTML = `<tr><td colspan="12" style="text-align:center;padding:30px;color:#888;">归档库为空</td></tr>`;
-      return;
-    }
-    archiveList.forEach((item,idx)=>{
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td><input class="checkbox arch-row" data-idx="${idx}" type="checkbox"></td>
-        <td>${idx+1}</td>
-        <td><strong>${item.code||""}</strong></td>
-        <td>${item.project||""}</td>
-        <td>${item.spec||""}</td>
-        <td>${item.cureType||""}</td>
-        <td>${item.formDate||""}</td>
-        <td>${item.sendDate||""}</td>
-        <td>${item.chip1||""}</td>
-        <td>${item.chip2||""}</td>
-        <td>${item.chip3||""}</td>
-        <td>${item.checked ? '<span class="tag-green">已确认</span>':'<span class="tag-orange">待核验</span>'}</td>
-      `;
-      tb.appendChild(tr);
-    })
-  }
+  function render() {
+    var list = Store.archivedAll();
+    el('hint').textContent = '共 ' + list.length + ' 条';
+    el('tbody').innerHTML = list.map(function (r, i) {
+      var isSel = !!selected[r.id];
+      var badge = r.status === '已确认' ? '<span class="badge ok">已确认</span>' : '<span class="badge warn">待核验</span>';
+      return '<tr data-id="' + r.id + '" class="' + (isSel ? 'sel' : '') + '">' +
+        '<td><input class="chk rowChk" type="checkbox" ' + (isSel ? 'checked' : '') + '></td>' +
+        '<td class="muted">' + (i + 1) + '</td>' +
+        '<td class="code">' + U.esc(r.code || '—') + '</td>' +
+        '<td>' + U.esc(r.project || '—') + '</td>' +
+        '<td class="nowrap">' + U.esc(r.spec || '—') + '</td>' +
+        '<td class="nowrap">' + U.esc(r.cure || '—') + '</td>' +
+        '<td class="nowrap">' + U.esc(r.madeDate || '—') + '</td>' +
+        '<td class="nowrap">' + U.esc(r.sendDate || '—') + '</td>' +
+        '<td class="chip">' + U.esc(r.chip1 || '—') + '</td>' +
+        '<td class="chip">' + U.esc(r.chip2 || '—') + '</td>' +
+        '<td class="chip">' + U.esc(r.chip3 || '—') + '</td>' +
+        '<td>' + badge + '</td>' +
+        '<td class="act"><button class="icon-btn" data-act="restore" title="撤回">↩</button>' +
+        '<button class="icon-btn del" data-act="del" title="彻底删除">✕</button></td>' +
+      '</tr>';
+    }).join('');
 
-  function archiveToggleAll(){
-    const allCb = document.getElementById("archiveCheckAll");
-    document.querySelectorAll(".arch-row").forEach(cb=>cb.checked = allCb.checked);
-  }
+    el('mList').innerHTML = list.map(function (r) {
+      var isSel = !!selected[r.id];
+      var badge = r.status === '已确认' ? '<span class="badge ok">已确认</span>' : '<span class="badge warn">待核验</span>';
+      return '<div class="mrow" data-id="' + r.id + '">' +
+        '<input class="chk rowChk" type="checkbox" ' + (isSel ? 'checked' : '') + ' style="margin-top:3px">' +
+        '<div class="l"><div class="t1">' + U.esc(r.code || '—') + '</div>' +
+        '<div class="t2">' + U.esc(r.project || '—') + badge + '</div>' +
+        '<div class="t3">' + U.esc(r.spec || '') + ' · ' + U.esc(r.cure || '') + ' · 送检 ' + U.esc(r.sendDate || '—') + '</div></div>' +
+        '<button class="icon-btn" data-act="restore" type="button" title="撤回">↩</button></div>';
+    }).join('');
 
-  //撤回选中记录回主清单
-  function rollbackSelected(){
-    const sel = [];
-    document.querySelectorAll(".arch-row:checked").forEach(cb=>sel.push(Number(cb.dataset.idx)));
-    if(sel.length===0){
-      alert("请勾选要撤回的归档记录");
-      return;
-    }
-    sel.sort((a,b)=>b-a).forEach(idx=>{
-      mainList.push(archiveList[idx]);
-      archiveList.splice(idx,1);
-    })
-    saveArchive();
-    saveMain();
-    renderArchive();
-    alert(`撤回${sel.length}条记录，回到主送检清单`);
+    el('emptyBox').innerHTML = list.length ? '' :
+      '<div class="empty"><div class="ico">🗂</div><h3>归档库是空的</h3>' +
+      '<p>在送检清单里勾选记录，点「归档选中」即可移入这里。</p>' +
+      '<a class="btn btn-sm btn-pri" href="desktop.html">返回送检清单</a></div>';
+
+    el('chkAll').checked = list.length > 0 && list.every(function (r) { return selected[r.id]; });
+    updateSel();
+    bind();
   }
 
-  function exportArchiveCSV(){
-    if(archiveList.length===0){alert("归档库无数据");return;}
-    let text = "序号,试件编号,工程名称,规格型号,养护类型,成型日期,送检日期,芯片号1,芯片号2,芯片号3,核验状态\n";
-    archiveList.forEach((item,i)=>{
-      text += `${i+1},${item.code||""},${item.project||""},${item.spec||""},${item.cureType||""},${item.formDate||""},${item.sendDate||""},${item.chip1||""},${item.chip2||""},${item.chip3||""},${item.checked?"已确认":"待核验"}\n`;
-    })
-    const blob = new Blob(["\uFEFF"+text], {type:"text/csv;charset=utf-8"});
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "试件归档清单.csv";
-    a.click();
+  function bind() {
+    $$('#tbody tr').forEach(function (tr) {
+      var id = tr.getAttribute('data-id');
+      tr.querySelector('.rowChk').addEventListener('change', function (e) {
+        if (e.target.checked) selected[id] = true; else delete selected[id];
+        tr.classList.toggle('sel', e.target.checked);
+        updateSel();
+      });
+      $$('[data-act]', tr).forEach(function (b) {
+        b.onclick = function () {
+          if (b.getAttribute('data-act') === 'restore') restore([id]);
+          else del(id);
+        };
+      });
+    });
+    $$('#mList .mrow').forEach(function (row) {
+      var id = row.getAttribute('data-id');
+      row.querySelector('.rowChk').addEventListener('change', function (e) {
+        if (e.target.checked) selected[id] = true; else delete selected[id];
+        updateSel();
+      });
+      var b = row.querySelector('[data-act="restore"]');
+      if (b) b.onclick = function (e) { e.stopPropagation(); restore([id]); };
+    });
   }
 
-  // 归档库导出Excel(.xlsx)
-  function exportArchiveExcel(){
-    if(archiveList.length===0){alert("归档库无数据");return;}
-    const rows = archiveList.map((item,i)=>({
-      "序号": i+1,
-      "试件编号": item.code||"",
-      "工程名称": item.project||"",
-      "规格型号": item.spec||"",
-      "养护类型": item.cureType||"",
-      "成型日期": item.formDate||"",
-      "送检日期": item.sendDate||"",
-      "芯片号1": item.chip1||"",
-      "芯片号2": item.chip2||"",
-      "芯片号3": item.chip3||"",
-      "核验状态": item.checked?"已确认":"待核验"
-    }));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "归档清单");
-    XLSX.writeFile(wb, "试件归档清单.xlsx");
+  function updateSel() {
+    var n = Object.keys(selected).filter(function (k) { return selected[k]; }).length;
+    el('selInfo').innerHTML = n ? '<span class="sel-info">已选 ' + n + ' 条</span>' : '未选择记录';
   }
-  renderArchive();
+
+  function restore(ids) {
+    if (!ids.length) { U.toast('请先勾选记录', 'err'); return; }
+    var n = Store.restore(ids);
+    ids.forEach(function (i) { delete selected[i]; });
+    U.toast('已撤回 ' + n + ' 条至送检清单', 'ok');
+    render();
+  }
+
+  function del(id) {
+    var r = Store.get(id);
+    if (!r) return;
+    if (!confirm('彻底删除该归档记录？\n\n' + r.code + ' · ' + r.project + '\n删除后不可恢复。')) return;
+    Store.remove(id); delete selected[id];
+    U.toast('已删除', 'ok'); render();
+  }
+
+  el('chkAll').addEventListener('change', function (e) {
+    selected = {};
+    if (e.target.checked) Store.archivedAll().forEach(function (r) { selected[r.id] = true; });
+    render();
+  });
+  el('btnRestore').onclick = function () {
+    restore(Object.keys(selected).filter(function (k) { return selected[k]; }));
+  };
+  el('btnRestore2').onclick = el('btnRestore').onclick;
+
+  el('btnExcel').onclick = function () {
+    var list = Store.archivedAll();
+    if (!list.length) { U.toast('归档库为空', 'err'); return; }
+    U.exportExcel(list, '试件归档库_' + Store.today() + '.xls', '试件归档库（' + Store.today() + '）');
+    U.toast('已导出 ' + list.length + ' 条', 'ok');
+  };
+  el('btnCsv').onclick = function () {
+    var list = Store.archivedAll();
+    if (!list.length) { U.toast('归档库为空', 'err'); return; }
+    U.exportCSV(list, '试件归档库_' + Store.today() + '.csv');
+    U.toast('已导出 ' + list.length + ' 条', 'ok');
+  };
+  el('btnClose').onclick = function () {
+    if (window.opener && !window.opener.closed) { window.close(); }
+    else location.href = 'desktop.html';
+  };
+
+  render();
+
+  /* 云端同步：从飞书拉到数据后自动重绘 */
+  document.addEventListener('cloud:updated', function () { render(); });
+  if (window.SampleCloud) window.SampleCloud.start({ onUpdate: render });
+})();
 </script>
 </body>
 </html>
