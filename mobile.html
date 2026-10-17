@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
 <title>试件送检清单｜手机版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,-apple-system,"PingFang SC"}
 body{background:#f4f6f8;padding-bottom:90px;color:#222;}
@@ -147,7 +148,9 @@ body{background:#f4f6f8;padding-bottom:90px;color:#222;}
 <div class="bottom-bar">
   <button class="btn btn-warn" onclick="archiveSelected()">归档选中</button>
   <button class="btn" onclick="window.open('archive.html','_blank')">归档库</button>
-  <button class="btn" onclick="exportCSV()">导出CSV</button>
+  <button class="btn" onclick="document.getElementById('fileInputM').click()">导入Excel</button>
+  <input type="file" id="fileInputM" accept=".xlsx,.xls,.csv" style="display:none" onchange="importExcel(event)" />
+  <button class="btn" onclick="exportExcel()">导出Excel</button>
 </div>
 
 <canvas id="canvas" class="canvas"></canvas>
@@ -343,6 +346,66 @@ body{background:#f4f6f8;padding-bottom:90px;color:#222;}
     const blob = new Blob(["\uFEFF"+text],{type:"text/csv;charset=utf-8"});
     const a = document.createElement("a");
     a.href=URL.createObjectURL(blob);a.download="试件送检清单_手机版.csv";a.click();
+  }
+  // 导出Excel(.xlsx)
+  function exportExcel(){
+    if(dataList.length===0){alert("暂无数据");return;}
+    const rows = dataList.map((item,i)=>({
+      "序号": i+1,
+      "试件编号": item.code||"",
+      "工程名称": item.project||"",
+      "规格型号": item.spec||"",
+      "养护类型": item.cureType||"",
+      "成型日期": item.formDate||"",
+      "送检日期": item.sendDate||"",
+      "芯片号1": item.chip1||"",
+      "芯片号2": item.chip2||"",
+      "芯片号3": item.chip3||"",
+      "核验状态": item.checked?"已确认":"待核验"
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "送检清单");
+    XLSX.writeFile(wb, "试件送检清单.xlsx");
+  }
+  // 从Excel/CSV导入
+  function importExcel(event){
+    const file = event.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e){
+      try {
+        const wb = XLSX.read(e.target.result, {type:"array"});
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, {defval:""});
+        if(rows.length===0){alert("文件中没有数据");return;}
+        let added = 0, skipped = 0;
+        rows.forEach(row=>{
+          const code = String(row["试件编号"]||row["编号"]||row["code"]||"").trim();
+          if(!code) return;
+          if(dataList.some(i=>i.code===code)){skipped++;return;}
+          dataList.push({
+            code: code,
+            project: String(row["工程名称"]||row["工程"]||row["project"]||"").trim(),
+            spec: String(row["规格型号"]||row["规格"]||row["spec"]||"").trim(),
+            cureType: String(row["养护类型"]||row["养护"]||row["cureType"]||"").trim(),
+            formDate: String(row["成型日期"]||row["formDate"]||"").trim(),
+            sendDate: String(row["送检日期"]||row["sendDate"]||"").trim(),
+            chip1: String(row["芯片号1"]||row["芯片1"]||row["chip1"]||"").trim(),
+            chip2: String(row["芯片号2"]||row["芯片2"]||row["chip2"]||"").trim(),
+            chip3: String(row["芯片号3"]||row["芯片3"]||row["chip3"]||"").trim(),
+            checked: false
+          });
+          added++;
+        });
+        saveData();renderCardList();
+        alert(`导入完成：新增 ${added} 条，跳过重复/空编号 ${skipped} 条`);
+      } catch(err){
+        alert("导入失败，请确认文件格式。表头需包含：试件编号、工程名称、规格型号、养护类型、成型日期、送检日期、芯片号1、芯片号2、芯片号3");
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    event.target.value = "";
   }
   document.getElementById("keyword").addEventListener("input",renderCardList);
   document.getElementById("filterStatus").addEventListener("change",renderCardList);
