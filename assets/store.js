@@ -257,7 +257,7 @@
       return r;
     },
 
-    /* 云端层用：把飞书 record_id 绑到本地记录（不触发同步钩子） */
+    /* 云端层用：把云端记录 id 绑到本地记录（不触发同步钩子） */
     setRid: function (id, rid) {
       var list = read();
       for (var i = 0; i < list.length; i++) {
