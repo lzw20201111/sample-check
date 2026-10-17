@@ -292,7 +292,8 @@
         return '<td class="chip"><span class="' + (on ? 'chip-hit ' : '') + (dup ? 'chip-dup' : '') + '">' + U.esc(val) +
           (dup ? '<i class="dup-tag">重复</i>' : '') + '</span></td>';
       }
-      return '<tr data-id="' + r.id + '" class="' + (isSel ? 'sel' : '') + (r.id === flashId ? ' row-hit' : '') + '">' +
+      return '<tr data-id="' + r.id + '" class="' + (isSel ? 'sel' : '') + (r.id === flashId ? ' row-hit' : '') +
+        (r.cure === '同条件养护' ? ' row-cure' : '') + '">' +
         '<td><input class="chk rowChk" type="checkbox" ' + (isSel ? 'checked' : '') + '></td>' +
         '<td class="muted">' + (i + 1) + '</td>' +
         '<td class="nowrap strong">' + U.esc(r.sendDate || '—') + '</td>' +
