@@ -571,7 +571,7 @@
   /* 从「本次送检」页带芯片号跳来：自动打开新增并预填芯片号 */
   if (qs.add) openAdd(Store.normCode(qs.add));
 
-  /* 云端同步：从飞书拉到数据后自动重绘 */
+  /* 云端同步：从云端拉到数据后自动重绘 */
   document.addEventListener('cloud:updated', function () { render(); });
   if (window.SampleCloud) window.SampleCloud.start({ onUpdate: render });
 })();
