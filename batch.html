@@ -189,6 +189,8 @@
   var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
   var state = { status: '', q: '' };
   var selected = {}, picked = {};
+  /* 本页扫码的临时高亮：{ id, chip } —— 清单页（电脑/手机）扫码写入的 hitChip 不在本页染色 */
+  var scanHit = null;
 
   if (window.innerWidth < 760) {
     el('linkList').setAttribute('href', 'mobile.html');
@@ -199,10 +201,10 @@
     return r.status === '已核实' ? '<span class="badge ok">已核实</span>' : '<span class="badge warn">未核实</span>';
   }
   function chipsHtml(r) {
-    var hit = Store.normCode(r.hitChip);
+    var on = scanHit && scanHit.id === r.id;
     return [r.chip1, r.chip2, r.chip3].filter(Boolean).map(function (c) {
-      var on = hit && Store.normCode(c) === hit;
-      return '<span class="m-chip' + (on ? ' chip-hit' : '') + '">' + U.esc(c) + '</span>';
+      var lit = on && Store.normCode(c) === scanHit.chip;
+      return '<span class="m-chip' + (lit ? ' chip-hit' : '') + '">' + U.esc(c) + '</span>';
     }).join('');
   }
 
@@ -409,6 +411,7 @@
     if (!inBatch) Store.addToBatch([hit.rec.id]);
     var res = Store.confirm(hit.rec.id, hit.chip);
     Store.logScan(hit.chip, true, res.id);
+    scanHit = { id: hit.rec.id, chip: Store.normCode(hit.chip) };
     render();
     if (inBatch) {
       setStatus('已核实：命中 ' + (FIELD_CN[hit.field] || '芯片号') + '「' + hit.chip + '」· ' + (res.examType || '') +
