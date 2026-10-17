@@ -190,6 +190,7 @@
       hitChip: rec.hitChip || '',
       status: rec.status === '已核实' ? '已核实' : '待核实',
       archived: rec.archived === true,
+      batchAt: rec.batch === true ? (rec.batchAt || Store.today()) : '',
       remark: rec.remark || ''
     };
   }
@@ -212,6 +213,8 @@
       hitChip: w.hitChip || '',
       status: (w.status === '已核实' || w.status === '已确认') ? '已核实' : '待核实',
       archived: w.archived === true,
+      batch: w.batch === true || !!String(w.batchAt || '').trim(),
+      batchAt: String(w.batchAt || '').trim(),
       remark: w.remark || ''
     };
   }
@@ -708,6 +711,36 @@
         return ret;
       };
     });
+
+    /* 本次送检批次：加入 / 移出 / 清空 也要即时同步 */
+    ['addToBatch', 'removeFromBatch'].forEach(function (fn) {
+      var orig = Store[fn];
+      if (typeof orig !== 'function') return;
+      Store[fn] = function () {
+        var ids = arguments[0] || [];
+        var olds = ids.map(function (i) { return Store.get(i); }).filter(Boolean);
+        var ret = orig.apply(Store, arguments);
+        if (suspend === 0) pushBatch(olds);
+        return ret;
+      };
+    });
+    var _clearBatch = Store.clearBatch;
+    if (typeof _clearBatch === 'function') {
+      Store.clearBatch = function () {
+        var olds = Store.batchAll().map(function (r) { return Store.get(r.id); }).filter(Boolean);
+        var ret = _clearBatch.apply(Store, arguments);
+        if (suspend === 0) pushBatch(olds);
+        return ret;
+      };
+    }
+    function pushBatch(olds) {
+      olds.forEach(function (o) {
+        var now = Store.get(o.id);
+        if (!now) return;
+        if (now.rid) enqueue({ op: 'update', rid: now.rid, id: now.id, data: toWire(now) });
+        else enqueue({ op: 'create', id: now.id, data: toWire(now) });
+      });
+    }
 
     /* Excel / JSON 批量导入 */
     var _impRows = Store.importRows;
