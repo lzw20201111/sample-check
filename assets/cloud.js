@@ -16,7 +16,10 @@
   'use strict';
 
   /* 候选中转线路：第一个是默认的 workers.dev，后面可以自己加 */
-  var DEFAULT_ENDPOINTS = ['https://sample-check-worker.297182.workers.dev'];
+  var DEFAULT_ENDPOINTS = [
+    'https://sample-check.pages.dev',            /* Cloudflare Pages：静态站 + /api 同源，国内可直连 */
+    'https://sample-check-worker.297182.workers.dev' /* 旧线路，国内多被墙，仅兜底 */
+  ];
   var CFG_KEY = 'wb_sample_cloud_v1';
   var QKEY = 'wb_sample_queue_v1';
 
