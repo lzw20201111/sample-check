@@ -758,7 +758,7 @@
     el('headSub').textContent = '还没有记录，点「+ 新增记录」或「导入Excel」开始';
   }
 
-  /* 云端同步：从飞书拉到数据后自动重绘 */
+  /* 云端同步：从云端拉到数据后自动重绘 */
   document.addEventListener('cloud:updated', function () { render(); });
   if (window.SampleCloud) window.SampleCloud.start({ onUpdate: render });
 })();
