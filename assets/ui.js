@@ -212,7 +212,7 @@
     opts = opts || {};
     ensureDelModal();
     delModal.querySelector('#delAuthMsg').textContent =
-      (opts.message ? opts.message + '\n' : '') + '删除后会同步从飞书表格中移除，且不可恢复。';
+      (opts.message ? opts.message + '\n' : '') + '删除后会同步从云端数据库移除，且不可恢复。';
     delOkCB = opts.onOk || null;
     delErr.textContent = '';
     delModal.style.display = 'flex';
