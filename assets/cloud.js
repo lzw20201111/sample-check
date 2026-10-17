@@ -742,30 +742,28 @@
       });
     }
 
-    /* Excel / JSON 批量导入 */
+    /* Excel / JSON 批量导入：新增与更新过的记录都入队 */
+    function syncAfterImport(ret) {
+      if (suspend !== 0) return ret;
+      localList().forEach(function (r) {
+        var wire = JSON.stringify(toWire(r));
+        if (before[r.id] !== wire) {
+          enqueue(r.rid ? { op: 'update', rid: r.rid, id: r.id, data: toWire(r) } : { op: 'create', id: r.id, data: toWire(r) });
+        }
+      });
+      return ret;
+    }
     var _impRows = Store.importRows;
     Store.importRows = function () {
       var before = {};
-      localList().forEach(function (r) { before[r.id] = 1; });
-      var ret = _impRows.apply(Store, arguments);
-      if (suspend === 0) {
-        localList().forEach(function (r) {
-          if (!before[r.id]) enqueue(r.rid ? { op: 'update', rid: r.rid, id: r.id, data: toWire(r) } : { op: 'create', id: r.id, data: toWire(r) });
-        });
-      }
-      return ret;
+      localList().forEach(function (r) { before[r.id] = JSON.stringify(toWire(r)); });
+      return syncAfterImport(_impRows.apply(Store, arguments));
     };
     var _impJSON = Store.importJSON;
     Store.importJSON = function () {
       var before = {};
-      localList().forEach(function (r) { before[r.id] = 1; });
-      var ret = _impJSON.apply(Store, arguments);
-      if (suspend === 0) {
-        localList().forEach(function (r) {
-          if (!before[r.id]) enqueue(r.rid ? { op: 'update', rid: r.rid, id: r.id, data: toWire(r) } : { op: 'create', id: r.id, data: toWire(r) });
-        });
-      }
-      return ret;
+      localList().forEach(function (r) { before[r.id] = JSON.stringify(toWire(r)); });
+      return syncAfterImport(_impJSON.apply(Store, arguments));
     };
 
     /* 演示数据只留本地，不写进飞书 */
