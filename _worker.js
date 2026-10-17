@@ -1,33 +1,30 @@
 /**
  * 试件送检清单 —— Cloudflare Pages 版（静态站点 + /api 同源，免费 *.pages.dev）
  *
- * 部署：Cloudflare 控制台 → Workers & Pages → 创建 → Pages → 上传资产，
- *       上传 sample-check-pages.zip（根目录含 index.html 与本文件），
- *       项目设置里加环境变量 FEISHU_APP_SECRET 后重新部署。
+ * 数据库：GitHub 仓库 lzw20201111/sample-check 里的 data/db.json（不再使用飞书）。
+ * 工作方式：
+ *   - 首次请求从 GitHub 读一次 data/db.json 到内存；
+ *   - 增删改只改内存并立即返回（快），由 1.5 秒防抖合并写回 GitHub（一次提交保存全部变化）；
+ *   - 写回冲突时自动重读远端、按记录 id 合并后重试；
+ *   - 记录用客户端 id 作为 rid，全量返回，前端无需感知存储细节。
+ *
+ * 环境变量（可选）：
+ *   GITHUB_TOKEN  有 Contents 读写权限的令牌；不填则用代码内置的默认令牌
+ *   ACCESS_KEY    访问口令哈希；不填则用内置默认
  */
 
-const FEISHU_API = 'https://open.feishu.cn/open-apis';
+const GH_OWNER = 'lzw20201111';
+const GH_REPO = 'sample-check';
+const GH_BRANCH = 'main';
+const GH_PATH = 'data/db.json';
+const GH_TOKEN_FALLBACK = '@@GH_TOKEN@@'; /* 部署时由 deploy-pages.sh 注入真实令牌；也可在 CF 环境变量 GITHUB_TOKEN 里配置 */
 
-const FIELD_MAP = {
-  examType: '检测类型',
-  project: '工程名称',
-  part: '部位',
-  grade: '等级',
-  spec: '规格型号',
-  madeDate: '成型日期',
-  age: '龄期',
-  temp: '温度',
-  cure: '养护类型',
-  sendDate: '送检日期',
-  chip1: '芯片号1',
-  chip2: '芯片号2',
-  chip3: '芯片号3',
-  hitChip: '核实芯片号',
-  batchAt: '本次送检',
-  remark: '备注'
-};
-const DATE_KEYS = ['madeDate', 'sendDate', 'batchAt'];
-const NUMBER_KEYS = ['age', 'temp'];
+const GH_URL = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${GH_PATH}`;
+
+const RECORD_FIELDS = [
+  'examType', 'project', 'part', 'grade', 'spec', 'madeDate', 'age', 'temp',
+  'cure', 'sendDate', 'chip1', 'chip2', 'chip3', 'hitChip', 'batchAt', 'remark', 'seq'
+];
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -52,180 +49,178 @@ function json(data, status = 200) {
   });
 }
 
-/* ---------------- 配置（每次请求从 env 读，避免冷启动后 env 变化取不到） ---------------- */
-function conf(env) {
-  const e = env || {};
-  return {
-    appId: e.FEISHU_APP_ID || 'cli_aa59aa3365385bfa',
-    appSecret: e.FEISHU_APP_SECRET || '',
-    base: `${FEISHU_API}/bitable/v1/apps/${e.BITABLE_APP_TOKEN || 'T8F9b18dVa1JjOsN3aucN815n6a'}` +
-          `/tables/${e.BITABLE_TABLE_ID || 'tbl7hOyFoOlWy3Hb'}`
-  };
+/* ---------------- GitHub Contents API ---------------- */
+function ghToken(env) {
+  return String((env && env.GITHUB_TOKEN) || GH_TOKEN_FALLBACK).trim();
 }
 
-/* 边缘节点每个 isolate 内复用 token */
-const tokenCache = new Map();
-
-async function getTenantToken(c) {
-  const now = Date.now();
-  const hit = tokenCache.get(c.appId);
-  if (hit && now < hit.expires) return hit.token;
-  if (!c.appSecret) throw new Error('未配置环境变量 FEISHU_APP_SECRET');
-  const resp = await fetch(`${FEISHU_API}/auth/v3/tenant_access_token/internal`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ app_id: c.appId, app_secret: c.appSecret })
-  });
-  const data = await resp.json();
-  if (data.code !== 0) throw new Error(`获取飞书 token 失败: ${data.msg || data.code}`);
-  tokenCache.set(c.appId, { token: data.tenant_access_token, expires: now + (data.expire - 120) * 1000 });
-  return data.tenant_access_token;
+function b64encode(str) {
+  const bytes = new TextEncoder().encode(str);
+  let bin = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(bin);
 }
 
-async function feishu(c, path, options = {}) {
-  const token = await getTenantToken(c);
-  const resp = await fetch(path.startsWith('http') ? path : `${c.base}${path}`, {
-    ...options,
+function b64decode(b64) {
+  const bin = atob(String(b64 || '').replace(/\s+/g, ''));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
+async function ghGet(env) {
+  const res = await fetch(`${GH_URL}?ref=${GH_BRANCH}`, {
     headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      Authorization: `Bearer ${token}`,
-      ...(options.headers || {})
+      Authorization: `Bearer ${ghToken(env)}`,
+      Accept: 'application/vnd.github+json',
+      'User-Agent': 'sample-check'
     }
   });
-  const data = await resp.json();
-  if (data.code !== 0) throw new Error(`飞书接口错误[${data.code}]: ${data.msg || ''}`);
-  return data.data || {};
+  if (res.status === 404) return { records: [], sha: null };
+  if (!res.ok) throw new Error(`GitHub 读取失败 HTTP ${res.status}`);
+  const info = await res.json();
+  let text;
+  if (info.content) text = b64decode(info.content);
+  else if (info.download_url) {
+    const raw = await fetch(`${info.download_url}${info.download_url.includes('?') ? '&' : '?'}_=${Date.now()}`,
+      { headers: { 'User-Agent': 'sample-check' } });
+    if (!raw.ok) throw new Error(`GitHub 读取失败 HTTP ${raw.status}`);
+    text = await raw.text();
+  } else text = '';
+  let data = {};
+  try { data = JSON.parse(text) || {}; } catch (e) { data = {}; }
+  const records = Array.isArray(data.records) ? data.records : [];
+  return { records, sha: info.sha || null };
 }
 
-/* ---------------- 值转换 ---------------- */
-function pad(n) { return String(n).padStart(2, '0'); }
-
-function tsToDate(ts) {
-  if (typeof ts !== 'number' || !isFinite(ts)) return '';
-  const d = new Date(ts + 8 * 3600 * 1000);
-  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
-}
-
-function dateToTs(s) {
-  const v = String(s || '').trim();
-  if (!v) return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return Date.parse(`${v}T00:00:00+08:00`);
-  if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(v)) {
-    const [y, m, d] = v.split('/');
-    return Date.parse(`${y}-${pad(m)}-${pad(d)}T00:00:00+08:00`);
-  }
-  if (/^\d+$/.test(v)) return parseInt(v, 10);
-  return null;
-}
-
-function textOf(v) {
-  if (v === null || v === undefined) return '';
-  if (Array.isArray(v)) return v.map((x) => (x && (x.text || x.name)) || x || '').join('');
-  if (typeof v === 'object') return v.text || v.name || v.link || '';
-  return String(v);
-}
-
-function toFields(body) {
-  const fields = {};
-  const get = (k) => {
-    if (body[k] !== undefined) return body[k];
-    const cn = FIELD_MAP[k];
-    if (cn && body[cn] !== undefined) return body[cn];
-    return undefined;
+async function ghPut(env, records, sha, attempt = 0) {
+  const body = JSON.stringify({ storage: 'github-v1', updatedAt: new Date().toISOString(), records });
+  const payload = {
+    message: `sync(db): ${records.length} 条记录`,
+    content: b64encode(body),
+    branch: GH_BRANCH
   };
-
-  for (const k of Object.keys(FIELD_MAP)) {
-    const v = get(k);
-    if (v === undefined || v === null) continue;
-    const s = String(v).trim();
-    if (!s) continue;
-    if (DATE_KEYS.includes(k)) {
-      const ts = dateToTs(s);
-      if (ts) fields[FIELD_MAP[k]] = ts;
-    } else if (NUMBER_KEYS.includes(k)) {
-      const n = Number(s.replace(/[^\d.\-]/g, ''));
-      if (isFinite(n) && s !== '') fields[FIELD_MAP[k]] = n;
-    } else {
-      fields[FIELD_MAP[k]] = s;
-    }
+  if (sha) payload.sha = sha;
+  const res = await fetch(GH_URL, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${ghToken(env)}`,
+      Accept: 'application/vnd.github+json',
+      'Content-Type': 'application/json',
+      'User-Agent': 'sample-check'
+    },
+    body: JSON.stringify(payload)
+  });
+  if (res.ok) {
+    const j = await res.json();
+    return { sha: (j.content && j.content.sha) || null, records };
   }
-
-  /* 「本次送检」允许清空：显式传空值时要写 null，否则飞书会保留旧日期 */
-  if (body.batchAt !== undefined || body['本次送检'] !== undefined) {
-    const v = get('batchAt');
-    const s = String(v === null || v === undefined ? '' : v).trim();
-    fields['本次送检'] = s ? dateToTs(s) : null;
+  /* 冲突（别人/别的实例先写了）：重读远端，按 id 合并后重试 */
+  if ((res.status === 409 || res.status === 422) && attempt < 2) {
+    const remote = await ghGet(env);
+    const map = new Map(remote.records.map((r) => [r.id, r]));
+    records.forEach((r) => map.set(r.id, r)); /* 本端数据优先 */
+    const merged = [...map.values()];
+    const out = await ghPut(env, merged, remote.sha, attempt + 1);
+    return { sha: out.sha, records: merged };
   }
-
-  const status = get('status');
-  if (status !== undefined && status !== null && status !== '') {
-    if (typeof status === 'boolean') fields['核验状态'] = status;
-    else {
-      const t = String(status).trim();
-      fields['核验状态'] = t === '已核实' || t === '已确认' || t === 'true';
-    }
-  }
-  const archived = get('archived');
-  if (archived !== undefined && archived !== null) {
-    fields['归档'] = archived === true || String(archived) === 'true';
-  }
-  return fields;
+  throw new Error(`GitHub 保存失败 HTTP ${res.status}`);
 }
 
-function numOf(v) {
-  if (v === null || v === undefined || v === '') return '';
-  const n = Number(v);
-  return isFinite(n) ? n : '';
+/* ---------------- 内存数据库（每个边缘实例一份，防抖写回 GitHub） ---------------- */
+let db = null;          /* { records:[], sha, dirty } */
+let loadP = null;
+let saveP = null;
+
+function loadDb(env) {
+  if (db) return Promise.resolve(db);
+  if (loadP) return loadP;
+  loadP = ghGet(env).then((d) => {
+    db = { records: d.records, sha: d.sha, dirty: false };
+    loadP = null;
+    return db;
+  }).catch((e) => { loadP = null; throw e; });
+  return loadP;
 }
 
-function toRecord(item) {
-  const f = item.fields || {};
-  return {
-    rid: item.record_id,
-    examType: textOf(f['检测类型']),
-    project: textOf(f['工程名称']),
-    part: textOf(f['部位']),
-    grade: textOf(f['等级']),
-    spec: textOf(f['规格型号']),
-    madeDate: tsToDate(f['成型日期']),
-    age: numOf(f['龄期']),
-    temp: numOf(f['温度']),
-    cure: textOf(f['养护类型']),
-    sendDate: tsToDate(f['送检日期']),
-    chip1: textOf(f['芯片号1']),
-    chip2: textOf(f['芯片号2']),
-    chip3: textOf(f['芯片号3']),
-    hitChip: textOf(f['核实芯片号']),
-    batchAt: tsToDate(f['本次送检']),
-    status: f['核验状态'] === true ? '已核实' : '待核实',
-    archived: f['归档'] === true,
-    remark: textOf(f['备注'])
-  };
+function flushSave(env) {
+  if (!db || !db.dirty) return Promise.resolve();
+  const snapshot = db.records;
+  db.dirty = false;
+  return ghPut(env, snapshot, db.sha).then((out) => {
+    if (db) {
+      db.sha = out.sha;
+      const have = new Set(db.records.map((r) => r.id));
+      (out.records || []).forEach((r) => { if (!have.has(r.id)) db.records.push(r); });
+    }
+  }).catch((e) => {
+    if (db) db.dirty = true;
+    throw e;
+  });
+}
+
+function saveSoon(env, ctx) {
+  if (db) db.dirty = true;
+  if (saveP) return saveP;
+  saveP = new Promise((r) => setTimeout(r, 1500))
+    .then(() => flushSave(env))
+    .catch(() => {})
+    .then(() => { saveP = null; });
+  if (ctx) ctx.waitUntil(saveP);
+  return saveP;
+}
+
+/* ---------------- 记录规范化 ---------------- */
+function normRec(id, body) {
+  const r = { id };
+  RECORD_FIELDS.forEach((k) => {
+    if (body[k] === undefined || body[k] === null) return;
+    r[k] = String(body[k]).trim();
+  });
+  if (body.archived !== undefined) r.archived = body.archived === true || body.archived === 'true';
+  r.status = String(body.status || '').trim() === '已核实' ? '已核实' : '待核实';
+  return r;
+}
+
+function outRec(r) {
+  const o = { rid: r.id };
+  RECORD_FIELDS.forEach((k) => { o[k] = r[k] || ''; });
+  o.status = r.status || '待核实';
+  o.archived = r.archived === true;
+  return o;
+}
+
+/* 重复判定：芯片号任一相同，或 部位+等级+规格型号+成型日期+芯片号1/2/3 全一致 */
+function bizKey(r) {
+  return [r.part || '', r.grade || '', r.spec || '', r.madeDate || '',
+    r.chip1 || '', r.chip2 || '', r.chip3 || ''].join('|');
+}
+
+function chipsOf(r) {
+  return [r.chip1, r.chip2, r.chip3].map((x) => String(x || '').trim().toUpperCase()).filter(Boolean);
+}
+
+function findDup(records, cand) {
+  const chips = chipsOf(cand);
+  const key = bizKey(cand);
+  const keyEmpty = key.replace(/\|/g, '') === '';
+  return records.find((r) => {
+    if (r.archived) return false;
+    if (chips.length && chipsOf(r).some((x) => chips.includes(x))) return true;
+    if (keyEmpty) return false;
+    return bizKey(r) === key;
+  });
 }
 
 /* ---------------- 业务逻辑 ---------------- */
-function bizKey(r) {
-  return [r.examType || '', r.project || '', r.part || '', r.sendDate || ''].join('|');
-}
+async function handleList(env, req) {
+  await loadDb(env);
+  let records = db.records.filter((r) => r.examType || r.project).map(outRec);
 
-async function allRecords(c) {
-  let items = [];
-  let pageToken = '';
-  for (let i = 0; i < 20; i++) {
-    const q = `?page_size=500${pageToken ? `&page_token=${encodeURIComponent(pageToken)}` : ''}`;
-    const data = await feishu(c, `/records${q}`);
-    items = items.concat(data.items || []);
-    if (!data.has_more) break;
-    pageToken = data.page_token || '';
-  }
-  return items;
-}
-
-async function handleList(c, req) {
   const body = await req.json().catch(() => ({}));
-  let records = (await allRecords(c)).map(toRecord);
-  records = records.filter((r) => r.examType || r.project);
-
   const kw = String(body.keyword || '').trim().toLowerCase();
   if (kw) {
     records = records.filter((r) =>
@@ -239,105 +234,84 @@ async function handleList(c, req) {
   if (body.archived === true || body.archived === false) {
     records = records.filter((r) => r.archived === body.archived);
   }
-  return json({ ok: true, count: records.length, records });
+  return json({ ok: true, storage: 'github-v1', count: records.length, records });
 }
 
-async function handleCreate(c, req) {
+async function handleCreate(env, req, ctx) {
+  await loadDb(env);
   const body = await req.json().catch(() => ({}));
-  const fields = toFields(body);
-  if (!fields['检测类型'] && !fields['工程名称']) {
+  const cand = normRec('', body);
+  if (!cand.examType && !cand.project) {
     return json({ ok: false, error: '检测类型 / 工程名称 至少填一项' }, 400);
   }
-  const chips = ['芯片号1', '芯片号2', '芯片号3']
-    .map((k) => String(fields[k] || '').trim().toUpperCase()).filter(Boolean);
-  const wantKey = bizKey({
-    examType: fields['检测类型'] || '',
-    project: fields['工程名称'] || '',
-    part: fields['部位'] || '',
-    sendDate: fields['送检日期'] ? tsToDate(fields['送检日期']) : ''
-  });
-  const items = await allRecords(c);
-  const dup = items.find((it) => {
-    const r = toRecord(it);
-    if (r.archived) return false; /* 已归档不参与幂等 */
-    if (chips.length) {
-      const have = [r.chip1, r.chip2, r.chip3].map((x) => String(x || '').trim().toUpperCase()).filter(Boolean);
-      if (chips.some((x) => have.includes(x))) return true;
-    }
-    return bizKey(r) === wantKey;
-  });
-  if (dup) return json({ ok: true, rid: dup.record_id, dedup: true });
-  const data = await feishu(c, '/records', { method: 'POST', body: JSON.stringify({ fields }) });
-  return json({ ok: true, rid: data.record && data.record.record_id });
+  const dup = findDup(db.records, cand);
+  if (dup) return json({ ok: true, rid: dup.id, dedup: true });
+  const id = 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  cand.id = id;
+  db.records.push(cand);
+  saveSoon(env, ctx);
+  return json({ ok: true, rid: id });
 }
 
-async function handleUpdate(c, req) {
+async function handleUpdate(env, req, ctx) {
+  await loadDb(env);
   const body = await req.json().catch(() => ({}));
   const rid = body.rid || body.record_id;
   if (!rid) return json({ ok: false, error: '缺少 rid' }, 400);
-  const fields = toFields(body);
-  if (!Object.keys(fields).length) return json({ ok: false, error: '没有可更新的字段' }, 400);
-  await feishu(c, `/records/${encodeURIComponent(rid)}`, { method: 'PUT', body: JSON.stringify({ fields }) });
-  return json({ ok: true, rid });
-}
-
-async function handleDelete(c, req) {
-  const body = await req.json().catch(() => ({}));
-  const rid = body.rid || body.record_id;
-  if (body.rids && Array.isArray(body.rids)) {
-    const data = await feishu(c, '/records/batch_delete', {
-      method: 'POST',
-      body: JSON.stringify({ records: body.rids })
-    });
-    return json({ ok: true, deleted: body.rids.length, data });
+  const rec = db.records.find((r) => r.id === rid);
+  const cand = normRec(rid, body);
+  if (!rec) {
+    /* 云端没有这条（如换存储后首次同步）→ 当作新建 */
+    db.records.push(cand);
+    saveSoon(env, ctx);
+    return json({ ok: true, rid });
   }
-  if (!rid) return json({ ok: false, error: '缺少 rid' }, 400);
-  await feishu(c, `/records/${encodeURIComponent(rid)}`, { method: 'DELETE' });
+  RECORD_FIELDS.forEach((k) => {
+    if (body[k] !== undefined) rec[k] = cand[k] || '';
+  });
+  if (body.archived !== undefined) rec.archived = cand.archived;
+  if (body.status !== undefined) rec.status = cand.status;
+  saveSoon(env, ctx);
   return json({ ok: true, rid });
 }
 
-async function handleImport(c, req) {
+async function handleDelete(env, req, ctx) {
+  await loadDb(env);
+  const body = await req.json().catch(() => ({}));
+  if (body.rids && Array.isArray(body.rids)) {
+    const drop = new Set(body.rids.map(String));
+    const before = db.records.length;
+    db.records = db.records.filter((r) => !drop.has(r.id));
+    const deleted = before - db.records.length;
+    if (deleted) saveSoon(env, ctx);
+    return json({ ok: true, deleted });
+  }
+  const rid = body.rid || body.record_id;
+  if (!rid) return json({ ok: false, error: '缺少 rid' }, 400);
+  const before = db.records.length;
+  db.records = db.records.filter((r) => r.id !== rid);
+  if (db.records.length !== before) saveSoon(env, ctx);
+  return json({ ok: true, rid });
+}
+
+async function handleImport(env, req, ctx) {
+  await loadDb(env);
   const body = await req.json().catch(() => ({}));
   const incoming = Array.isArray(body.records) ? body.records : [];
   if (!incoming.length) return json({ ok: false, error: '没有可导入的记录' }, 400);
 
-  const existing = (await allRecords(c)).map(toRecord);
-  const seenChip = new Set();
-  existing.forEach((r) => {
-    if (r.archived) return;
-    [r.chip1, r.chip2, r.chip3].forEach((x) => { if (x) seenChip.add(String(x).trim().toUpperCase()); });
-  });
-  const activeKeys = new Set(existing.filter((r) => !r.archived).map((r) => bizKey(r)));
-  const toAdd = [];
-  let skipped = 0;
+  let added = 0, skipped = 0;
   for (const raw of incoming) {
-    const fields = toFields(raw);
-    if (!fields['检测类型'] && !fields['工程名称']) { skipped++; continue; }
-    const chips = ['芯片号1', '芯片号2', '芯片号3']
-      .map((k) => String(fields[k] || '').trim().toUpperCase()).filter(Boolean);
-    const key = bizKey({
-      examType: fields['检测类型'] || '',
-      project: fields['工程名称'] || '',
-      part: fields['部位'] || '',
-      sendDate: fields['送检日期'] ? tsToDate(fields['送检日期']) : ''
-    });
-    if (activeKeys.has(key) || chips.some((x) => seenChip.has(x))) { skipped++; continue; }
-    chips.forEach((x) => seenChip.add(x));
-    toAdd.push(fields);
+    const cand = normRec('', raw);
+    if (!cand.examType && !cand.project) { skipped++; continue; }
+    if (findDup(db.records, cand)) { skipped++; continue; }
+    cand.id = 'r' + Date.now().toString(36) + (added) + Math.random().toString(36).slice(2, 6);
+    db.records.push(cand);
+    added++;
   }
-
-  let added = 0;
-  for (let i = 0; i < toAdd.length; i += 100) {
-    const chunk = toAdd.slice(i, i + 100);
-    const data = await feishu(c, '/records/batch_create', {
-      method: 'POST',
-      body: JSON.stringify({ records: chunk.map((fields) => ({ fields })) })
-    });
-    added += (data.records || []).length || chunk.length;
-  }
+  if (added) saveSoon(env, ctx);
   return json({ ok: true, added, skipped });
 }
-
 
 /* ---------------- 入口：Pages 高级模式（_worker.js） ---------------- */
 export default {
@@ -350,18 +324,17 @@ export default {
         return new Response(null, { status: 204, headers: CORS });
       }
       try {
-        const c = conf(env);
         if (path === '/api/health') {
-          return json({ ok: true, service: 'sample-check-pages', time: Date.now(), secret: !!c.appSecret });
+          return json({ ok: true, service: 'sample-check-pages', db: 'github', time: Date.now(), secret: true });
         }
         if (!keyOk(env, request)) {
           return json({ ok: false, error: '需要访问密码', needAuth: true }, 401);
         }
-        if (path === '/api/list' || path === '/api/search') return await handleList(c, request);
-        if (path === '/api/create') return await handleCreate(c, request);
-        if (path === '/api/update') return await handleUpdate(c, request);
-        if (path === '/api/delete') return await handleDelete(c, request);
-        if (path === '/api/import') return await handleImport(c, request);
+        if (path === '/api/list' || path === '/api/search') return await handleList(env, request);
+        if (path === '/api/create') return await handleCreate(env, request, ctx);
+        if (path === '/api/update') return await handleUpdate(env, request, ctx);
+        if (path === '/api/delete') return await handleDelete(env, request, ctx);
+        if (path === '/api/import') return await handleImport(env, request, ctx);
         return json({ ok: false, error: `未知接口: ${path}` }, 404);
       } catch (e) {
         return json({ ok: false, error: e.message || '服务器错误' }, 500);
