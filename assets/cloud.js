@@ -58,17 +58,25 @@
   /* ---------------- 网络 ---------------- */
   function post(path, body) {
     var url = Cloud.api + path;
+    var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 9000) : null;
+    function done() { if (timer) clearTimeout(timer); }
     return fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body || {})
+      body: JSON.stringify(body || {}),
+      signal: ctrl ? ctrl.signal : undefined
     }).then(function (res) {
       return res.text().then(function (t) {
+        done();
         var d;
         try { d = JSON.parse(t); } catch (e) { throw new Error('接口返回异常（HTTP ' + res.status + '）'); }
         if (!d.ok) throw new Error(d.error || ('接口错误 HTTP ' + res.status));
         return d;
       });
+    }, function (e) {
+      done();
+      throw new Error(e && e.name === 'AbortError' ? '连接中转服务器超时' : '连接中转服务器失败');
     });
   }
 
@@ -278,7 +286,11 @@
     b.style.background = m[1];
     b.style.color = m[2];
     b.style.borderColor = m[3];
+    b.title = Cloud.state === 'offline'
+      ? ('云端未连接：' + (Cloud.error || '网络异常') + '（数据已存在本机，联网后自动补传）')
+      : '点击立即与飞书多维表格同步';
     b.style.display = 'block';
+    showBadge(false);
   }
 
   function showBadge(sticky) {
@@ -286,11 +298,13 @@
     b.style.opacity = '1';
     b.style.pointerEvents = 'auto';
     if (hideTimer) clearTimeout(hideTimer);
-    if (!sticky) {
-      hideTimer = setTimeout(function () {
-        if (Cloud.state === 'cloud') { b.style.opacity = '0'; b.style.pointerEvents = 'none'; }
-      }, 2600);
-    }
+    if (sticky) return;
+    if (Cloud.state === 'syncing') return;
+    var wait = Cloud.state === 'offline' ? 6000 : 2600;
+    hideTimer = setTimeout(function () {
+      b.style.opacity = '0';
+      b.style.pointerEvents = 'none';
+    }, wait);
   }
 
   function notify() {
@@ -395,7 +409,6 @@
     if (typeof o.onUpdate === 'function') Cloud.onUpdate = o.onUpdate;
     install(global.SampleStore);
     paint();
-    showBadge(true);
     var p = Cloud.pull();
     if (queue.length) Cloud.flush();
     global.addEventListener('online', function () { Cloud.pull().then(function () { Cloud.flush(); }); });
