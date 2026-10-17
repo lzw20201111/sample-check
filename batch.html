@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>本次送检｜试件送检清单</title>
 <meta name="theme-color" content="#17588f">
-<meta name="description" content="本次送检批次：从试件送检清单挑选、扫码核验芯片号、实时同步飞书多维表格。">
+<meta name="description" content="本次送检批次：从试件送检清单挑选、扫码核验芯片号、实时同步云端数据库。">
 <link rel="stylesheet" href="assets/style.css">
 <script src="assets/auth.js"></script>
 <style>
@@ -76,7 +76,7 @@
     <div class="mark">批</div>
     <div>
       <h1>本次送检</h1>
-      <div class="sub">从清单挑选 · 扫码核验 · 实时同步飞书</div>
+      <div class="sub">从清单挑选 · 扫码核验 · 实时同步云端</div>
     </div>
     <div class="b-hero-act">
       <a class="btn btn-sm" href="desktop.html" id="heroList">📋 试件送检清单</a>
@@ -114,7 +114,7 @@
   </section>
 
   <p class="b-tip">
-    加入 / 移出 / 扫码核验都会立即写入飞书多维表格（表内「本次送检」列）。<br>
+    加入 / 移出 / 扫码核验都会立即同步到云端数据库。<br>
     移出只是退出本批次，记录仍在送检清单里；要彻底删除请到 <a href="desktop.html">清单</a> 或 <a href="archive.html">归档库</a> 操作。
   </p>
 </main>
@@ -415,11 +415,11 @@
     render();
     if (inBatch) {
       setStatus('已核实：命中 ' + (FIELD_CN[hit.field] || '芯片号') + '「' + hit.chip + '」· ' + (res.examType || '') +
-        '（已同步飞书）', 'ok');
+        '（已同步云端）', 'ok');
       U.toast('已核实：' + hit.chip, 'ok');
     } else {
       setStatus('已加入本次送检并核实：命中 ' + (FIELD_CN[hit.field] || '芯片号') + '「' + hit.chip + '」· ' + (res.examType || '') +
-        '（已同步飞书）', 'ok');
+        '（已同步云端）', 'ok');
       U.toast('已加入本次送检并核实：' + hit.chip, 'ok');
     }
     return hit;
