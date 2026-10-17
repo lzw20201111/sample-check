@@ -259,7 +259,7 @@
   function p(n) { return String(n).padStart(2, '0'); }
   el('todayTxt').textContent = d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
 
-  function visibleList() { return Store.all(state); }
+  function visibleList() { return Store.all(Object.assign({ hideBatch: true }, state)); }
 
   function render() {
     var list = visibleList();
