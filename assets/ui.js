@@ -164,11 +164,67 @@
     return /Android|iPhone|iPad|iPod|Mobile|HarmonyOS|MiuiBrowser/i.test(navigator.userAgent) || window.innerWidth < 760;
   }
 
+  /* ---------- 删除二次验证：需输入删除密码 ---------- */
+  /* 密码「12345678」的 SHA-256；修改密码时替换此值即可 */
+  var DEL_HASH = 'ef797c8118f02dfb649607dd5d3f8c7623048c9c063d532cc95c5ed7a898a64f';
+  var delModal = null, delInput = null, delErr = null;
+
+  function ensureDelModal() {
+    if (delModal) return;
+    delModal = document.createElement('div');
+    delModal.id = 'delAuthModal';
+    delModal.style.cssText = 'position:fixed;inset:0;z-index:10001;background:rgba(15,27,45,.55);display:none;align-items:center;justify-content:center;padding:18px';
+    delModal.innerHTML =
+      '<div style="background:#fff;border-radius:14px;max-width:340px;width:100%;box-shadow:0 20px 60px -12px rgba(15,27,45,.5);overflow:hidden">' +
+        '<div style="padding:16px 18px 0"><h3 style="margin:0;font-size:15.5px;color:#0f172a">🔒 删除验证</h3>' +
+        '<p id="delAuthMsg" style="margin:8px 0 0;font-size:12.5px;line-height:1.7;color:#475569;white-space:pre-wrap;word-break:break-all"></p></div>' +
+        '<div style="padding:12px 18px 4px"><input id="delAuthPwd" type="password" inputmode="numeric" autocomplete="off" placeholder="请输入删除密码" ' +
+          'style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #cbd5e1;border-radius:9px;font-size:15px;letter-spacing:2px;outline:none">' +
+        '<div id="delAuthErr" style="font-size:12px;color:#b91c1c;margin-top:6px;min-height:16px"></div></div>' +
+        '<div style="display:flex;gap:8px;padding:8px 18px 16px">' +
+          '<button type="button" id="delAuthCancel" style="flex:1;padding:10px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;color:#334155;font:600 14px/1.4 inherit;cursor:pointer">取消</button>' +
+          '<button type="button" id="delAuthOk" style="flex:1;padding:10px;border:0;border-radius:9px;background:#b91c1c;color:#fff;font:700 14px/1.4 inherit;cursor:pointer">确认删除</button>' +
+        '</div></div>';
+    document.body.appendChild(delModal);
+    delInput = delModal.querySelector('#delAuthPwd');
+    delErr = delModal.querySelector('#delAuthErr');
+    delModal.querySelector('#delAuthOk').onclick = tryDel;
+    delModal.querySelector('#delAuthCancel').onclick = closeDel;
+    delModal.addEventListener('click', function (e) { if (e.target === delModal) closeDel(); });
+    delInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') tryDel(); });
+  }
+  function closeDel() { delModal.style.display = 'none'; delInput.value = ''; delErr.textContent = ''; delOkCB = null; }
+  var delOkCB = null;
+  function tryDel() {
+    var v = String(delInput.value || '');
+    var sha = (global.SampleAuth && global.SampleAuth.sha256) ? global.SampleAuth.sha256(v) : '';
+    if (sha && sha === DEL_HASH) {
+      var cb = delOkCB; closeDel();
+      if (cb) cb();
+    } else {
+      delErr.textContent = v ? '密码不正确，请重新输入' : '请输入删除密码';
+      delInput.value = '';
+      delInput.focus();
+    }
+  }
+  /* UI.confirmDelete({ title, message, onOk }) —— 三端统一的删除密码验证 */
+  function confirmDelete(opts) {
+    opts = opts || {};
+    ensureDelModal();
+    delModal.querySelector('#delAuthMsg').textContent =
+      (opts.message ? opts.message + '\n' : '') + '删除后会同步从飞书表格中移除，且不可恢复。';
+    delOkCB = opts.onOk || null;
+    delErr.textContent = '';
+    delModal.style.display = 'flex';
+    setTimeout(function () { delInput.focus(); }, 60);
+  }
+
   global.UI = {
     $: $, $$: $$, esc: esc, dash: dash, toast: toast, download: download,
     toMatrix: toMatrix, toCSV: toCSV, toExcelHTML: toExcelHTML,
     exportExcel: exportExcel, exportCSV: exportCSV,
     parseCSV: parseCSV, readRows: readRows, pickFile: pickFile,
-    nowText: nowText, HEAD: HEAD, isMobile: isMobile
+    nowText: nowText, HEAD: HEAD, isMobile: isMobile,
+    confirmDelete: confirmDelete
   };
 })(window);
