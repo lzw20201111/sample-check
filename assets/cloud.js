@@ -102,9 +102,12 @@
     var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
     var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, ms || 9000) : null;
     function done() { if (timer) clearTimeout(timer); }
+    var accessKey = (global.SampleAuth && global.SampleAuth.hash) || '';
     return fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: accessKey
+        ? { 'Content-Type': 'application/json', 'X-Access-Key': accessKey }
+        : { 'Content-Type': 'application/json' },
       body: JSON.stringify(body || {}),
       signal: ctrl ? ctrl.signal : undefined
     }).then(function (res) {
@@ -117,8 +120,9 @@
           throw e1;
         }
         if (!d.ok) {
-          var e2 = new Error(d.error || ('接口错误 HTTP ' + res.status));
+          var e2 = new Error(res.status === 401 ? '需要访问密码，请刷新页面重新输入' : (d.error || ('接口错误 HTTP ' + res.status)));
           e2.code = 'API';
+          e2.needAuth = res.status === 401;
           throw e2;
         }
         return d;
