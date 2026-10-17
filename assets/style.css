@@ -105,6 +105,20 @@ input, select, textarea, button { font-family: inherit; font-size: inherit; colo
 .btn-lg { padding: 11px 20px; font-size: 14.5px; border-radius: 10px; }
 .btn .i { font-size: 14px; line-height: 1; }
 
+/* 本次送检页：扫码核验主按钮加大突出（页面主操作，白底蓝字最醒目） */
+.b-hero-act #btnScan {
+  padding: 12px 26px; font-size: 15.5px; font-weight: 800; border-radius: 12px;
+  background: #fff; border-color: #fff; color: #124a7c;
+  box-shadow: 0 10px 22px -8px rgba(4, 24, 44, .55); gap: 8px;
+}
+.b-hero-act #btnScan .i { font-size: 18px; }
+.b-hero-act #btnScan:hover { background: #eaf3fb; border-color: #eaf3fb; color: #0f3d66; }
+.b-hero-act #btnScan:active { transform: scale(.96); }
+@media (max-width: 760px) {
+  .b-hero-act #btnScan { padding: 15px 28px; font-size: 17px; }
+  .b-hero-act #btnScan .i { font-size: 20px; }
+}
+
 /* ---------- 统计卡 ---------- */
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 16px; }
 .stat { position: relative; background: #fff; border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; box-shadow: var(--sh); overflow: hidden; }
