@@ -41,7 +41,7 @@
   }
   function norm(u) { return String(u == null ? '' : u).trim().replace(/\/+$/, ''); }
 
-  /* 候选线路优先级：页面参数 > 本机保存的列表 > 默认 */
+  /* 候选线路优先级：页面参数 > 同源（站点自带的 /api）> 本机保存的列表 > 默认 */
   function endpoints() {
     var q = '';
     try { q = new URLSearchParams(location.search).get('api') || ''; } catch (e) {}
@@ -53,8 +53,10 @@
       : [];
     if (c.api && list.indexOf(norm(c.api)) < 0) list.unshift(norm(c.api));
     if (!list.length) list = DEFAULT_ENDPOINTS.slice();
-    /* 站点本身挂在 Worker 上时，同源最快 */
-    if (/\.workers\.dev$/i.test(location.hostname) && list.indexOf('') < 0) list.unshift('');
+    /* 站点自建了 /api（EdgeOne Pages、Worker 域名、本机调试）时，同源最快，排最前 */
+    var host = location.hostname;
+    var isStaticOnly = /(^|\.)github\.io$/i.test(host) || !/^https?:$/i.test(location.protocol);
+    if (!isStaticOnly && list.indexOf('') < 0) list.unshift('');
     return list;
   }
 
@@ -108,7 +110,7 @@
         var d;
         try { d = JSON.parse(t); } catch (e) {
           var e1 = new Error('接口返回异常（HTTP ' + res.status + '）');
-          e1.code = 'API';
+          e1.code = 'NOTAPI';   /* 不是本接口（多半是静态页的 404 HTML），可以换线路 */
           throw e1;
         }
         if (!d.ok) {
@@ -127,14 +129,15 @@
   }
 
   /* POST + 线路自动切换：
-     只有“连不上/超时”（code=NET）才换下一条线路重试；接口本身报错不重试，避免重复写入。
-     Worker 的 create 按业务键去重，所以换线路重发不会产生重复记录。 */
+     连不上/超时（NET）或返回的不是接口 JSON（NOTAPI，比如静态站 404 页）→ 换下一条线路重试；
+     接口本身报错（API）不重试，避免掩盖真实错误。
+     Worker / EdgeOne 的 create 都按业务键去重，所以换线路重发不会产生重复记录。 */
   function post(path, body, tried) {
     tried = tried || [];
     var ep = Cloud.api;
     tried.push(ep);
     return request(ep, path, body, 9000).catch(function (e) {
-      if (!e || e.code !== 'NET') throw e;
+      if (!e || e.code === 'API') throw e;
       var rest = endpoints().filter(function (u) { return tried.indexOf(u) < 0; });
       if (!rest.length) throw e;
       Cloud.api = rest[0];
