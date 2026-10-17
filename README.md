@@ -78,6 +78,15 @@ Cloudflare Worker 中转（sample-check-worker）
 
 若项目名不是 `sample-check`，把 `assets/cloud.js` 里 `DEFAULT_ENDPOINTS` 的第一条改成实际域名即可。
 
+## 访问密码
+
+四个页面（入口 / 电脑版 / 手机版 / 归档库）都接入了访问密码门禁，四个页面须先输入密码才能看到内容：
+
+- 实现：`assets/auth.js`，页面 `<head>` 里同步加载；未通过时给 `<html>` 加 `wb-locked` 隐藏正文，验证通过后本机保存 30 天凭证（`localStorage: wb_sample_auth_v1`）。
+- 密码在代码里**只存 SHA-256 哈希**，不存明文；修改密码时用新密码的 SHA-256 替换 `assets/auth.js` 顶部的 `HASH`，同时替换 `_worker.js` 与 `functions/api/[[default]].js` 里的 `ACCESS_HASH`。
+- 接口同样加了口令：`/api/*`（`/api/health` 除外）必须带 `X-Access-Key: <哈希>`，否则返回 `401 {"needAuth":true}`，避免绕过页面直接调接口取数据。前端 `cloud.js` 会自动带上该请求头。
+- 也可用环境变量 `ACCESS_KEY` 覆盖服务端口令（值仍为哈希）。
+
 ## 切换后端地址（国内网络必看）
 
 Cloudflare 默认域名 `*.workers.dev` 在国内经常被阻断（实测本机直连超时）。因此前端支持**多条候选线路自动探测**：
