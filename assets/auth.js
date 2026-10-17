@@ -7,7 +7,7 @@
   var STORE_KEY = 'wb_sample_auth_v1';
   var TTL = 30 * 24 * 3600 * 1000; /* 通过后本机 30 天免输入 */
 
-  global.SampleAuth = { hash: HASH, logout: logout };
+  global.SampleAuth = { hash: HASH, logout: logout, sha256: sha256 };
 
   /* ---------- 纯 JS SHA-256（不依赖 crypto.subtle，http 环境也能用） ---------- */
   function sha256(ascii) {
