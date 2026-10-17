@@ -69,6 +69,7 @@
 
 <div class="m-bottom">
   <button type="button" id="btnArcSel"><span class="i">🗄</span>归档选中</button>
+  <a class="m-tab-link" href="batch.html"><span class="i">🚚</span>本次送检</a>
   <a class="m-tab-link" href="archive.html"><span class="i">📁</span>归档库</a>
   <button type="button" id="btnImp"><span class="i">📥</span>导入Excel</button>
   <button type="button" id="btnExp"><span class="i">📤</span>导出Excel</button>
@@ -108,6 +109,7 @@
       <div style="font-size:12px;color:var(--bad);margin-top:10px;min-height:16px" id="formErr"></div>
     </div>
     <div class="modal-f">
+      <button class="btn btn-danger" type="button" id="btnDel" style="display:none;margin-right:auto">删除</button>
       <button class="btn" type="button" data-close="formModal">取消</button>
       <button class="btn btn-pri" type="button" id="btnSave">保存</button>
     </div>
@@ -165,6 +167,13 @@
   var selected = {};
   var editingId = '';
   var scanHandle = null, lastCode = '', torchOn = false;
+  /* 从「本次送检」页跳来时带参数：?add=芯片号&batch=1 */
+  var qs = {};
+  try {
+    var sp = new URLSearchParams(location.search);
+    sp.forEach(function (val, key) { qs[key] = val; });
+  } catch (e) { qs = {}; }
+  var wantBatch = qs.batch === '1';
 
   function el(id) { return document.getElementById(id); }
   function v(id) { return el(id).value.trim(); }
@@ -304,12 +313,14 @@
     syncSend();
     if (prefillChip) el('fChip1').value = prefillChip;
     el('formErr').textContent = '';
+    el('btnDel').style.display = 'none';
     el('formModal').classList.add('show');
   }
   function openEdit(id) {
     var r = Store.get(id); if (!r) return;
     editingId = r.id;
     el('mTitle').textContent = '编辑送检记录';
+    el('btnDel').style.display = '';
     el('fExam').value = r.examType; el('fProject').value = r.project;
     el('fPart').value = r.part; el('fGrade').value = r.grade; el('fSpec').value = r.spec;
     el('fCure').value = r.cure || '标准养护';
@@ -351,9 +362,12 @@
       rec.confirmedAt = old ? old.confirmedAt : '';
       rec.hitChip = old && old.hitChip && chips.indexOf(Store.normCode(old.hitChip)) >= 0 ? old.hitChip : '';
     }
-    if (!Store.save(rec)) { el('formErr').textContent = '保存失败'; return; }
+    var saved = Store.save(rec);
+    if (!saved) { el('formErr').textContent = '保存失败'; return; }
+    /* 从「本次送检」页带 batch=1 跳转过来登记 → 存完自动加入本批次 */
+    if (!editingId && wantBatch && saved.id) Store.addToBatch([saved.id]);
     el('formModal').classList.remove('show');
-    U.toast(editingId ? '已保存修改' : '已新增 1 条', 'ok');
+    U.toast(editingId ? '已保存修改' : (wantBatch ? '已登记并加入本次送检' : '已新增 1 条'), 'ok');
     render();
   }
 
@@ -454,6 +468,16 @@
   /* 事件 */
   el('btnAdd').onclick = function () { openAdd(); };
   el('btnSave').onclick = saveForm;
+  el('btnDel').onclick = function () {
+    if (!editingId) return;
+    var r = Store.get(editingId);
+    if (!r) return;
+    if (!confirm('删除这条记录？\n\n' + desc(r) + '\n' + (r.project || '') + '\n\n删除后会同步从飞书表格中移除，且不可恢复。')) return;
+    Store.remove(editingId);
+    el('formModal').classList.remove('show');
+    editingId = '';
+    U.toast('已删除并同步', 'ok'); render();
+  };
   el('btnScan').onclick = function () {
     el('scanModal').classList.add('show');
     setCode(''); setStatus('点击「开始扫码」调用摄像头');
@@ -538,6 +562,9 @@
   });
 
   render();
+
+  /* 从「本次送检」页带芯片号跳来：自动打开新增并预填芯片号 */
+  if (qs.add) openAdd(Store.normCode(qs.add));
 
   /* 云端同步：从飞书拉到数据后自动重绘 */
   document.addEventListener('cloud:updated', function () { render(); });
