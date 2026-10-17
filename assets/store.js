@@ -1,6 +1,9 @@
 /* 试件送检清单 —— 数据层
  * 电脑版 / 手机版 / 归档库 三页共用
  * 数据保存在浏览器 localStorage，可导出 Excel / CSV / JSON 备份
+ *
+ * 字段：检测类型 / 工程名称 / 部位 / 等级 / 规格型号 / 成型日期 / 龄期 / 温度
+ *       养护类型 / 送检日期（= 成型日期 + 龄期）/ 芯片号1~3 / 状态 / 备注
  */
 (function (global) {
   'use strict';
@@ -10,7 +13,11 @@
   var LKEY = 'wb_sample_scanlog_v1';
 
   var CURES = ['标准养护', '同条件养护', '现场养护', '蒸压养护', '其他'];
-  var STATUS = { PENDING: '待核验', DONE: '已确认' };
+  /* 送检日期 = 成型日期 + 龄期 的养护类型 */
+  var AUTO_SEND_CURES = ['标准养护', '同条件养护'];
+  var STATUS = { PENDING: '待核实', DONE: '已核实' };
+  var EXAM_TYPES = ['混凝土抗压', '混凝土抗折', '混凝土抗渗', '砂浆抗压', '砂浆抗渗', '钢筋原材', '钢筋连接', '其他'];
+  var GRADES = ['C15', 'C20', 'C25', 'C30', 'C35', 'C40', 'C45', 'C50', 'C55', 'C60', 'M5', 'M7.5', 'M10', 'M15', 'M20'];
 
   var DEFAULTS = { project: '' };
 
@@ -61,27 +68,80 @@
     return String(s === null || s === undefined ? '' : s).trim().toUpperCase().replace(/\s+/g, '');
   }
 
+  /* 日期字符串校验 + 加天数（按 UTC 计算，避免夏令时误差） */
+  function parseDate(s) {
+    var m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(String(s || '').trim());
+    if (!m) return null;
+    var y = +m[1], mo = +m[2], d = +m[3];
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+    return Date.UTC(y, mo - 1, d);
+  }
+  function fmtDate(ts) {
+    if (ts === null || ts === undefined || !isFinite(ts)) return '';
+    var d = new Date(ts);
+    function p(n) { return String(n).padStart(2, '0'); }
+    return d.getUTCFullYear() + '-' + p(d.getUTCMonth() + 1) + '-' + p(d.getUTCDate());
+  }
+  function addDays(dateStr, days) {
+    var ts = parseDate(dateStr);
+    var n = parseInt(days, 10);
+    if (ts === null || !isFinite(n)) return '';
+    return fmtDate(ts + n * 86400000);
+  }
+  function dayDiff(a, b) {
+    var x = parseDate(a), y = parseDate(b);
+    if (x === null || y === null) return null;
+    return Math.round((y - x) / 86400000);
+  }
+
+  /* 该养护类型是否按「成型日期 + 龄期」自动算送检日期 */
+  function isAutoSend(cure) {
+    return AUTO_SEND_CURES.indexOf(String(cure || '').trim()) >= 0;
+  }
+
+  /* 送检日期推导：有成型日期 + 龄期就按公式算，否则沿用原值 */
+  function deriveSendDate(r) {
+    var given = String(r.sendDate || '').trim();
+    if (!isAutoSend(r.cure)) return given;
+    var auto = addDays(r.madeDate, r.age);
+    return auto || given;
+  }
+
   function normalize(r) {
+    var cure = String(r.cure || '').trim();
+    var ageRaw = r.age === null || r.age === undefined ? '' : String(r.age).trim().replace(/[^\d.]/g, '');
     var out = {
       id: r.id || '',
       rid: r.rid || '',
-      code: String(r.code || '').trim(),
+      examType: String(r.examType || '').trim(),
       project: String(r.project || '').trim(),
+      part: String(r.part || '').trim(),
+      grade: String(r.grade || '').trim(),
       spec: String(r.spec || '').trim(),
-      cure: String(r.cure || '').trim(),
       madeDate: String(r.madeDate || '').trim(),
-      sendDate: String(r.sendDate || '').trim(),
+      age: ageRaw,
+      temp: r.temp === null || r.temp === undefined ? '' : String(r.temp).trim().replace(/[^\d.\-]/g, ''),
+      cure: cure,
+      sendDate: '',
       chip1: normCode(r.chip1),
       chip2: normCode(r.chip2),
       chip3: normCode(r.chip3),
-      status: r.status === STATUS.DONE ? STATUS.DONE : STATUS.PENDING,
+      status: (r.status === STATUS.DONE || r.status === '已确认') ? STATUS.DONE : STATUS.PENDING,
+      hitChip: normCode(r.hitChip),
       archived: r.archived === true || r.archived === 'true',
       archivedAt: r.archivedAt || '',
       confirmedAt: r.confirmedAt || '',
       remark: r.remark || '',
+      /* 兼容旧数据（试件编号已由检测类型替代，保留原值不丢） */
+      code: String(r.code || '').trim(),
       createdAt: r.createdAt || 0,
       updatedAt: r.updatedAt || 0
     };
+    out.sendDate = deriveSendDate({
+      cure: out.cure, madeDate: out.madeDate, age: out.age,
+      sendDate: String(r.sendDate || '').trim()
+    });
+    if (out.status === STATUS.DONE && !out.hitChip) out.hitChip = '';
     return out;
   }
 
@@ -97,27 +157,56 @@
   function chipSet(r) {
     return [r.chip1, r.chip2, r.chip3].filter(function (c) { return !!c; });
   }
+  function chipsOf(r) {
+    return [r.chip1 || '', r.chip2 || '', r.chip3 || ''];
+  }
+
+  /* 业务去重键：检测类型 + 工程名称 + 部位 + 送检日期 */
+  function keyOf(r) {
+    return [r.examType || '', r.project || '', r.part || '', r.sendDate || ''].join('|');
+  }
+
+  /* 芯片号命中：返回 { rec, chip, field } —— chip 为命中的那一列的原值 */
+  function chipHitIn(r, target) {
+    var arr = chipsOf(r);
+    for (var i = 0; i < 3; i++) {
+      if (arr[i] && normCode(arr[i]) === target) {
+        return { rec: r, chip: arr[i], field: 'chip' + (i + 1), idx: i };
+      }
+    }
+    return null;
+  }
 
   var Store = {
     CURES: CURES,
+    AUTO_SEND_CURES: AUTO_SEND_CURES,
     STATUS: STATUS,
+    EXAM_TYPES: EXAM_TYPES,
+    GRADES: GRADES,
     settings: settings,
     saveSettings: saveSettings,
     uid: uid,
     today: today,
     normCode: normCode,
     chipSet: chipSet,
+    chipsOf: chipsOf,
+    addDays: addDays,
+    dayDiff: dayDiff,
+    isAutoSend: isAutoSend,
+    deriveSendDate: deriveSendDate,
+    keyOf: keyOf,
 
     /* 主清单（未归档） */
     all: function (opts) {
       var o = opts || {};
       var list = read().filter(function (r) { return o.archived ? r.archived === true : !r.archived; });
-      if (o.status) list = list.filter(function (r) { return r.status === o.status; });
-      if (o.todayOnly) list = list.filter(function (r) { return r.sendDate === today() || r.confirmedAt.slice(0, 10) === today(); });
+      if (o.status) list = list.filter(function (r) { return (r.status === '已确认' ? STATUS.DONE : r.status) === o.status; });
+      if (o.todayOnly) list = list.filter(function (r) { return r.sendDate === today() || String(r.confirmedAt).slice(0, 10) === today(); });
       if (o.q) {
         var q = String(o.q).trim().toLowerCase();
         list = list.filter(function (r) {
-          return [r.code, r.project, r.spec, r.cure, r.chip1, r.chip2, r.chip3, r.remark]
+          return [r.examType, r.project, r.part, r.grade, r.spec, r.cure, r.grade,
+            r.chip1, r.chip2, r.chip3, r.remark, r.code]
             .join(' ').toLowerCase().indexOf(q) >= 0;
         });
       }
@@ -143,6 +232,7 @@
             r.createdAt = list[i].createdAt || now;
             r.updatedAt = now;
             r.archived = list[i].archived === true ? true : r.archived;
+            if (!r.confirmedAt && list[i].confirmedAt) r.confirmedAt = list[i].confirmedAt;
             list[i] = r; found = true; break;
           }
         }
@@ -194,61 +284,68 @@
       return n;
     },
 
-    /* 按芯片号 / 试件编号查找（扫码核验用） */
-    findByCode: function (raw) {
-      var code = normCode(raw);
-      if (!code) return null;
-      var list = read().filter(function (r) { return !r.archived; });
-      for (var i = 0; i < list.length; i++) {
-        var r = list[i];
-        if (normCode(r.code) === code) return normalize(r);
-        if (chipSet(r).indexOf(code) >= 0) return normalize(r);
-      }
-      return null;
-    },
-
-    /* 扫码容错匹配：二维码内容可能是纯编号，也可能是一段文本/链接里含编号 */
-    matchRaw: function (raw) {
-      var s = String(raw === null || raw === undefined ? '' : raw).trim();
-      if (!s) return null;
-      var hit = Store.findByCode(s);
-      if (hit) return hit;
-      var tokens = s.match(/[0-9A-Za-z_\-]{4,}/g) || [];
-      for (var i = 0; i < tokens.length; i++) {
-        hit = Store.findByCode(tokens[i]);
+    /* 按芯片号 1/2/3 精确查找（扫码核验用），返回 { rec, chip, field, idx } */
+    findChip: function (raw) {
+      var target = normCode(raw);
+      if (!target) return null;
+      var pool = read().filter(function (r) { return !r.archived; }).map(normalize);
+      var i, hit;
+      for (i = 0; i < pool.length; i++) {
+        hit = chipHitIn(pool[i], target);
         if (hit) return hit;
       }
-      /* 包含匹配：手写/补打的编号可能混在长串里 */
-      var up = s.toUpperCase();
-      var pool = read().filter(function (r) { return !r.archived; });
+      /* 二维码里带前后缀时，按 token 再试一次 */
+      var tokens = String(raw || '').match(/[0-9A-Za-z_\-]{4,}/g) || [];
+      for (var t = 0; t < tokens.length; t++) {
+        var tk = normCode(tokens[t]);
+        if (!tk || tk === target) continue;
+        for (i = 0; i < pool.length; i++) {
+          hit = chipHitIn(pool[i], tk);
+          if (hit) return hit;
+        }
+      }
+      /* 包含匹配：芯片号被混在长串里 */
+      var up = String(raw || '').toUpperCase();
       for (i = 0; i < pool.length; i++) {
-        var r = pool[i];
-        var codes = [r.code, r.chip1, r.chip2, r.chip3].map(normCode).filter(Boolean);
-        for (var j = 0; j < codes.length; j++) {
-          var cd = codes[j];
-          if (cd.length >= 6 && up.indexOf(cd) >= 0) return normalize(r);
+        var arr = chipsOf(pool[i]);
+        for (var j = 0; j < 3; j++) {
+          var cd = normCode(arr[j]);
+          if (cd && cd.length >= 6 && up.indexOf(cd) >= 0) return { rec: pool[i], chip: arr[j], field: 'chip' + (j + 1), idx: j };
         }
       }
       return null;
     },
 
-    /* 芯片号是否已被别的记录占用 */
+    /* 兼容旧调用：只要记录 */
+    findByCode: function (raw) {
+      var h = Store.findChip(raw);
+      return h ? h.rec : null;
+    },
+    matchRaw: function (raw) {
+      var h = Store.findChip(raw);
+      return h ? h.rec : null;
+    },
+
+    /* 芯片号是否已被别的记录占用（已归档的不再占用，方便旧试件号回收） */
     chipOwner: function (chip, exceptId) {
       var c = normCode(chip);
       if (!c) return null;
       var list = read();
       for (var i = 0; i < list.length; i++) {
         if (list[i].id === exceptId) continue;
+        if (list[i].archived === true) continue;
         if (chipSet(list[i]).indexOf(c) >= 0) return normalize(list[i]);
       }
       return null;
     },
 
-    confirm: function (id) {
+    /* 核验：标记命中芯片号 + 状态置为已核实 */
+    confirm: function (id, chip) {
       var list = read();
       for (var i = 0; i < list.length; i++) {
         if (list[i].id === id) {
           list[i].status = STATUS.DONE;
+          if (chip !== undefined && chip !== null && String(chip).trim() !== '') list[i].hitChip = normCode(chip);
           list[i].confirmedAt = new Date().toISOString();
           list[i].updatedAt = Date.now();
           write(list);
@@ -278,29 +375,30 @@
       var t = today();
       var todayTotal = live.filter(function (r) { return r.sendDate === t; }).length;
       var done = live.filter(function (r) { return r.status === STATUS.DONE; }).length;
-      var pending = live.filter(function (r) { return r.status !== STATUS.DONE; }).length;
+      var pending = live.length - done;
       var scans = Store.scansToday().length;
       return { total: live.length, todayTotal: todayTotal, done: done, pending: pending, scans: scans, archived: read().filter(function (r) { return r.archived === true; }).length };
     },
 
     /* ------- 导入 / 导出 ------- */
     exportJSON: function () {
-      return JSON.stringify({ app: '试件送检清单', version: 1, exportedAt: new Date().toISOString(), records: read() }, null, 2);
+      return JSON.stringify({ app: '试件送检清单', version: 2, exportedAt: new Date().toISOString(), records: read() }, null, 2);
     },
     importJSON: function (text) {
       var data;
       try { data = JSON.parse(text); } catch (e) { return { ok: false, msg: '不是有效的 JSON 备份文件' }; }
       var incoming = Array.isArray(data) ? data : (data && data.records);
       if (!Array.isArray(incoming)) return { ok: false, msg: '备份文件里没有记录列表' };
-      var base = read(), byId = {};
-      base.forEach(function (r) { byId[r.id] = true; });
+      var base = read(), byId = {}, keys = {};
+      base.forEach(function (r) { byId[r.id] = true; keys[keyOf(normalize(r))] = true; });
       var added = 0, skipped = 0;
       incoming.forEach(function (r) {
         var nr = normalize(r);
         if (!nr.id) nr.id = uid();
-        if (byId[nr.id] || (nr.code && base.some(function (b) { return b.code === nr.code && b.sendDate === nr.sendDate; }))) { skipped++; return; }
+        var k = keyOf(nr);
+        if (byId[nr.id] || (k.replace(/\|/g, '') && keys[k])) { skipped++; return; }
         if (!nr.createdAt) nr.createdAt = Date.now();
-        byId[nr.id] = true;
+        byId[nr.id] = true; keys[k] = true;
         base.push(nr); added++;
       });
       if (!write(base)) return { ok: false, msg: '写入失败' };
@@ -312,11 +410,15 @@
       if (!rows || rows.length < 2) return { ok: false, msg: '表格里没有数据行' };
       var head = rows[0].map(function (h) { return String(h || '').replace(/\s/g, ''); });
       var map = {
-        code: ['试件编号', '编号', '试件号'],
+        examType: ['检测类型', '试件编号', '检测项目', '类型'],
         project: ['工程名称', '项目名称', '工程'],
+        part: ['部位', '检测部位', '施工部位'],
+        grade: ['等级', '强度等级', '设计等级'],
         spec: ['规格型号', '规格', '型号'],
         cure: ['养护类型', '养护方式', '养护'],
         madeDate: ['成型日期', '制作日期', '成型'],
+        age: ['龄期', '龄期(d)', '龄期（d）', '养护龄期'],
+        temp: ['温度', '气温', '温度(℃)'],
         sendDate: ['送检日期', '送检时间', '送检'],
         chip1: ['芯片号1', '芯片1', '芯片号一', '芯片号①'],
         chip2: ['芯片号2', '芯片2', '芯片号二', '芯片号②'],
@@ -332,27 +434,32 @@
       }
       var idx = {};
       for (var k in map) idx[k] = col(k);
-      if (idx.code < 0 && idx.project < 0) return { ok: false, msg: '没识别到「试件编号」或「工程名称」列，请检查表头' };
+      if (idx.examType < 0 && idx.project < 0) return { ok: false, msg: '没识别到「检测类型」或「工程名称」列，请检查表头' };
 
       var base = read(), added = 0, skipped = 0;
+      var keys = {};
+      base.forEach(function (b) { keys[keyOf(normalize(b))] = true; });
       for (var i = 1; i < rows.length; i++) {
         var row = rows[i] || [];
         function cell(key) {
           var j = idx[key];
           if (j < 0) return '';
-          var v = row[j];
-          return v === null || v === undefined ? '' : String(v).trim();
+          var val = row[j];
+          return val === null || val === undefined ? '' : String(val).trim();
         }
-        if (!cell('code') && !cell('project')) continue;
+        if (!cell('examType') && !cell('project')) continue;
         var rec = normalize({
-          code: cell('code'), project: cell('project'), spec: cell('spec'), cure: cell('cure'),
-          madeDate: cell('madeDate'), sendDate: cell('sendDate'),
+          examType: cell('examType'), project: cell('project'), part: cell('part'),
+          grade: cell('grade'), spec: cell('spec'), cure: cell('cure'),
+          madeDate: cell('madeDate'), age: cell('age'), temp: cell('temp'),
+          sendDate: cell('sendDate'),
           chip1: cell('chip1'), chip2: cell('chip2'), chip3: cell('chip3'),
           remark: cell('remark'),
-          status: cell('status') === '已确认' ? STATUS.DONE : STATUS.PENDING
+          status: (cell('status') === '已核实' || cell('status') === '已确认') ? STATUS.DONE : STATUS.PENDING
         });
-        var dup = base.some(function (b) { return b.code && b.code === rec.code && b.sendDate === rec.sendDate; });
-        if (dup) { skipped++; continue; }
+        var kk = keyOf(rec);
+        if (keys[kk]) { skipped++; continue; }
+        keys[kk] = true;
         rec.id = uid(); rec.createdAt = Date.now(); rec.updatedAt = Date.now();
         base.push(rec); added++;
       }
@@ -364,14 +471,13 @@
 
     seed: function () {
       if (read().length) return 0;
-      var t = today();
       var demo = [
-        { code: 'SP-20261017-01', project: '滨江花园二期 3# 楼', spec: '150×150×150mm', cure: '同条件养护', madeDate: '2026-09-19', sendDate: t, chip1: 'CH-9F31A2', status: '已确认' },
-        { code: 'SP-20261017-02', project: '滨江花园二期 3# 楼', spec: '150×150×150mm', cure: '标准养护', madeDate: '2026-09-19', sendDate: t, chip1: 'CH-9F31B7', chip2: 'CH-9F31C1', status: '待核验' },
-        { code: 'SP-20261017-03', project: '城东污水处理厂扩建', spec: '100×100×100mm', cure: '标准养护', madeDate: '2026-09-20', sendDate: t, chip1: 'CH-7D22E4', status: '待核验' },
-        { code: 'SP-20261016-01', project: '城东污水处理厂扩建', spec: '150×150×150mm', cure: '同条件养护', madeDate: '2026-09-18', sendDate: '2026-10-16', chip1: 'CH-7D22A9', status: '已确认' },
-        { code: 'SP-20261015-02', project: '滨江花园二期 5# 楼', spec: '150×150×150mm', cure: '标准养护', madeDate: '2026-09-17', sendDate: '2026-10-15', chip1: 'CH-5B10D3', chip2: 'CH-5B10D4', chip3: 'CH-5B10D5', status: '待核验' },
-        { code: 'SP-20261012-01', project: '滨江花园二期 5# 楼', spec: '70.7×70.7×70.7mm', cure: '现场养护', madeDate: '2026-09-14', sendDate: '2026-10-12', chip1: 'CH-5B0F77', status: '已确认' }
+        { examType: '混凝土抗压', project: '滨江花园二期 3# 楼', part: '四层梁板', grade: 'C30', spec: '150×150×150mm', cure: '标准养护', madeDate: '2026-09-19', age: '28', temp: '24.5', chip1: '3884100381', status: '已核实', hitChip: '3884100381' },
+        { examType: '混凝土抗压', project: '滨江花园二期 3# 楼', part: '四层柱', grade: 'C35', spec: '150×150×150mm', cure: '同条件养护', madeDate: '2026-09-19', age: '28', temp: '26.0', chip1: 'CH-9F31B7', chip2: 'CH-9F31C1', status: '待核实' },
+        { examType: '砂浆抗压', project: '城东污水处理厂扩建', part: '二沉池池壁', grade: 'M10', spec: '70.7×70.7×70.7mm', cure: '标准养护', madeDate: '2026-09-20', age: '28', temp: '23.8', chip1: 'CH-7D22E4', status: '待核实' },
+        { examType: '混凝土抗压', project: '城东污水处理厂扩建', part: '底板', grade: 'C30', spec: '150×150×150mm', cure: '同条件养护', madeDate: '2026-09-18', age: '28', temp: '25.2', chip1: 'CH-7D22A9', status: '已核实', hitChip: 'CH-7D22A9' },
+        { examType: '混凝土抗折', project: '滨江花园二期 5# 楼', part: '屋面层', grade: 'C30', spec: '150×150×600mm', cure: '标准养护', madeDate: '2026-09-17', age: '28', temp: '22.6', chip1: 'CH-5B10D3', chip2: 'CH-5B10D4', chip3: 'CH-5B10D5', status: '待核实' },
+        { examType: '混凝土抗渗', project: '滨江花园二期 5# 楼', part: '地下室外墙', grade: 'C30', spec: '175×185×150mm', cure: '标准养护', madeDate: '2026-09-14', age: '28', temp: '21.9', chip1: 'CH-5B0F77', status: '已核实', hitChip: 'CH-5B0F77' }
       ];
       var list = demo.map(function (d, i) {
         var r = normalize(d);

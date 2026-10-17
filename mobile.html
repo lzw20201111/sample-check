@@ -26,19 +26,19 @@
   <section class="m-card">
     <div class="m-stats">
       <div class="s"><div class="k">总数</div><div class="v" id="mTotal">0</div></div>
-      <div class="s ok"><div class="k">已确认</div><div class="v" id="mDone">0</div></div>
-      <div class="s warn"><div class="k">待核验</div><div class="v" id="mPending">0</div></div>
+      <div class="s ok"><div class="k">已核实</div><div class="v" id="mDone">0</div></div>
+      <div class="s warn"><div class="k">待核实</div><div class="v" id="mPending">0</div></div>
     </div>
   </section>
 
   <div class="m-tabs" id="tabs">
     <button type="button" data-status="" class="on">全部</button>
-    <button type="button" data-status="已确认">已确认</button>
-    <button type="button" data-status="待核验">待核验</button>
+    <button type="button" data-status="已核实">已核实</button>
+    <button type="button" data-status="待核实">待核实</button>
     <button type="button" class="find" id="findToggle">🔍</button>
   </div>
   <div class="m-find" id="mFind">
-    <input class="inp inp-sm" id="mq" placeholder="试件编号 / 工程名称 / 芯片号">
+    <input class="inp inp-sm" id="mq" placeholder="芯片号 / 检测类型 / 工程 / 部位">
   </div>
 
   <section class="m-card">
@@ -81,14 +81,23 @@
       <button class="icon-btn x" type="button" data-close="formModal">✕</button>
     </div>
     <div class="modal-b">
-      <div class="field" style="margin-bottom:12px"><label for="fCode">试件编号 <span class="req">*</span></label><input class="inp" id="fCode" placeholder="如 SP-20261017-01"></div>
+      <div class="field" style="margin-bottom:12px"><label for="fExam">检测类型 <span class="req">*</span></label><input class="inp" id="fExam" list="examList" placeholder="如 混凝土抗压"><datalist id="examList"></datalist></div>
       <div class="field" style="margin-bottom:12px"><label for="fProject">工程名称 <span class="req">*</span></label><input class="inp" id="fProject" placeholder="如 滨江花园二期 3# 楼"></div>
-      <div class="field" style="margin-bottom:12px"><label for="fSpec">规格型号</label><input class="inp" id="fSpec" placeholder="如 150×150×150mm"></div>
+      <div class="field" style="margin-bottom:12px"><label for="fPart">部位</label><input class="inp" id="fPart" placeholder="如 四层梁板"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div class="field"><label for="fGrade">等级</label><input class="inp" id="fGrade" list="gradeList" placeholder="C30"><datalist id="gradeList"></datalist></div>
+        <div class="field"><label for="fSpec">规格型号</label><input class="inp" id="fSpec" placeholder="150×150×150mm"></div>
+      </div>
       <div class="field" style="margin-bottom:12px"><label for="fCure">养护类型</label><select class="inp" id="fCure"></select></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
         <div class="field"><label for="fMade">成型日期</label><input class="inp" type="date" id="fMade"></div>
+        <div class="field"><label for="fAge">龄期（天）</label><input class="inp" id="fAge" type="number" min="0" step="1" inputmode="numeric" placeholder="28"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div class="field"><label for="fTemp">温度（℃）</label><input class="inp" id="fTemp" type="number" step="0.1" inputmode="decimal" placeholder="24.5"></div>
         <div class="field"><label for="fSend">送检日期</label><input class="inp" type="date" id="fSend"></div>
       </div>
+      <div style="font-size:11.5px;color:var(--ink-4);margin:-6px 0 12px" id="fSendTip">自动 = 成型日期 + 龄期</div>
       <div class="field" style="margin-bottom:12px"><label for="fChip1">芯片号1</label><input class="inp" id="fChip1" placeholder="扫码或手填"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
         <div class="field"><label for="fChip2">芯片号2</label><input class="inp" id="fChip2" placeholder="可不填"></div>
@@ -163,6 +172,15 @@
     var o = document.createElement('option'); o.value = c; o.textContent = c;
     el('fCure').appendChild(o);
   });
+  Store.EXAM_TYPES.forEach(function (t) {
+    var o = document.createElement('option'); o.value = t; el('examList').appendChild(o);
+  });
+  Store.GRADES.forEach(function (g) {
+    var o = document.createElement('option'); o.value = g; el('gradeList').appendChild(o);
+  });
+  el('fCure').addEventListener('change', onCureChange);
+  el('fMade').addEventListener('input', syncSend);
+  el('fAge').addEventListener('input', syncSend);
   el('heroSub').textContent = U.nowText().slice(0, 10) + ' · 现场送检';
 
   function render() {
@@ -177,16 +195,26 @@
     var box = el('mList');
     box.innerHTML = list.map(function (r) {
       var isSel = !!selected[r.id];
-      var badge = r.status === '已确认' ? '<span class="badge ok">已确认</span>' : '<span class="badge warn">待核验</span>';
+      var badge = r.status === '已核实' ? '<span class="badge ok">已核实</span>' : '<span class="badge warn">待核实</span>';
+      var hit = Store.normCode(r.hitChip);
+      var chips = [r.chip1, r.chip2, r.chip3].filter(Boolean).map(function (c) {
+        var on = hit && Store.normCode(c) === hit;
+        return '<span class="m-chip' + (on ? ' chip-hit' : '') + '">' + U.esc(c) + '</span>';
+      }).join('');
+      var meta = [];
+      if (r.age !== '') meta.push('龄期 ' + U.esc(r.age) + 'd');
+      if (r.temp !== '') meta.push(U.esc(r.temp) + '℃');
       return '<div class="m-rec" data-id="' + r.id + '">' +
         '<input class="chk rowChk" type="checkbox" ' + (isSel ? 'checked' : '') + ' style="margin-top:3px">' +
         '<div class="l" data-act="edit">' +
-          '<div class="t1">' + U.esc(r.code || '未编号') + badge + '</div>' +
-          '<div class="t2">' + U.esc(r.project || '—') + ' · ' + U.esc(r.cure || '—') + '</div>' +
-          '<div class="t3">' + U.esc(r.spec || '') + (r.chip1 ? ' · ' + U.esc(r.chip1) : '') + '</div>' +
-          '<div class="t3">成型 ' + U.esc(r.madeDate || '—') + ' · 送检 ' + U.esc(r.sendDate || '—') + '</div>' +
+          '<div class="t1">' + U.esc(r.examType || '未填检测类型') +
+            (r.grade ? '<span class="grade">' + U.esc(r.grade) + '</span>' : '') + badge + '</div>' +
+          '<div class="t2">' + U.esc(r.project || '—') + (r.part ? ' · ' + U.esc(r.part) : '') + '</div>' +
+          (chips ? '<div class="t3">' + chips + '</div>' : '') +
+          '<div class="t3">送检 ' + U.esc(r.sendDate || '—') + ' · 成型 ' + U.esc(r.madeDate || '—') +
+            (meta.length ? ' · ' + meta.join(' · ') : '') + '</div>' +
         '</div>' +
-        (r.status !== '已确认'
+        (r.status !== '已核实'
           ? '<button class="btn btn-sm" data-act="confirm" type="button" style="align-self:center">核验</button>'
           : '<button class="icon-btn" data-act="archive" type="button" style="align-self:center" title="归档">⬇</button>') +
       '</div>';
@@ -201,7 +229,7 @@
     if (el('btnSeed')) el('btnSeed').onclick = function () {
       var n = Store.seed(); U.toast(n ? '已载入 ' + n + ' 条演示数据' : '已有数据', 'ok'); render();
     };
-    if (el('btnAdd2')) el('btnAdd2').onclick = openAdd;
+    if (el('btnAdd2')) el('btnAdd2').onclick = function () { openAdd(); };
 
     bind();
     updateSel();
@@ -220,11 +248,13 @@
           var act = b.getAttribute('data-act');
           if (act === 'edit') openEdit(id);
           else if (act === 'confirm') {
-            var r = Store.confirm(id);
-            if (r) { Store.logScan(r.chip1 || r.code, true, r.id); U.toast('已确认：' + r.code, 'ok'); render(); }
+            var rr = Store.get(id);
+            var chip = rr ? (rr.chip1 || rr.chip2 || rr.chip3 || '') : '';
+            var res = Store.confirm(id, chip);
+            if (res) { Store.logScan(chip, true, res.id); U.toast('已核实：' + desc(res), 'ok'); render(); }
           } else if (act === 'archive') {
             var rec = Store.get(id);
-            if (confirm('把 ' + (rec ? rec.code : '该记录') + ' 移入归档库？')) { Store.archive([id]); delete selected[id]; U.toast('已归档', 'ok'); render(); }
+            if (confirm('把 ' + desc(rec) + ' 移入归档库？')) { Store.archive([id]); delete selected[id]; U.toast('已归档', 'ok'); render(); }
           }
         });
       });
@@ -238,12 +268,39 @@
   }
 
   /* 表单 */
+  function desc(r) {
+    if (!r) return '该记录';
+    var s = [r.examType, r.grade, r.part].filter(Boolean).join(' · ');
+    return s || r.project || '该记录';
+  }
+
+  /* 送检日期 = 成型日期 + 龄期（标准养护 / 同条件养护） */
+  function syncSend() {
+    var auto = Store.isAutoSend(el('fCure').value);
+    var send = el('fSend');
+    send.readOnly = auto;
+    send.classList.toggle('ro', auto);
+    if (auto) {
+      var d = Store.addDays(v('fMade'), v('fAge'));
+      if (d) send.value = d;
+    }
+    el('fSendTip').textContent = auto ? '自动 = 成型日期 + 龄期' : '该养护类型可手动填写';
+  }
+  function onCureChange() {
+    if (Store.isAutoSend(el('fCure').value) && !v('fAge')) el('fAge').value = '28';
+    syncSend();
+  }
+
   function openAdd(prefillChip) {
+    if (typeof prefillChip !== 'string') prefillChip = '';
     editingId = '';
     el('mTitle').textContent = '新增送检记录';
-    ['fCode', 'fProject', 'fSpec', 'fChip1', 'fChip2', 'fChip3', 'fRemark'].forEach(function (id) { el(id).value = ''; });
+    ['fExam', 'fProject', 'fPart', 'fGrade', 'fSpec', 'fMade', 'fAge', 'fTemp', 'fSend',
+      'fChip1', 'fChip2', 'fChip3', 'fRemark'].forEach(function (id) { el(id).value = ''; });
     el('fCure').value = '标准养护';
-    el('fMade').value = Store.today(); el('fSend').value = Store.today();
+    el('fMade').value = Store.today();
+    el('fAge').value = '28';
+    syncSend();
     if (prefillChip) el('fChip1').value = prefillChip;
     el('formErr').textContent = '';
     el('formModal').classList.add('show');
@@ -252,18 +309,21 @@
     var r = Store.get(id); if (!r) return;
     editingId = r.id;
     el('mTitle').textContent = '编辑送检记录';
-    el('fCode').value = r.code; el('fProject').value = r.project; el('fSpec').value = r.spec;
+    el('fExam').value = r.examType; el('fProject').value = r.project;
+    el('fPart').value = r.part; el('fGrade').value = r.grade; el('fSpec').value = r.spec;
     el('fCure').value = r.cure || '标准养护';
-    el('fMade').value = r.madeDate; el('fSend').value = r.sendDate;
+    el('fMade').value = r.madeDate; el('fAge').value = r.age; el('fTemp').value = r.temp;
+    el('fSend').value = r.sendDate;
     el('fChip1').value = r.chip1; el('fChip2').value = r.chip2; el('fChip3').value = r.chip3;
     el('fRemark').value = r.remark;
+    syncSend();
     el('formErr').textContent = '';
     el('formModal').classList.add('show');
   }
   function saveForm() {
-    if (!v('fCode') || !v('fProject')) {
-      el('formErr').textContent = '请填写试件编号和工程名称';
-      if (!v('fCode')) el('fCode').classList.add('err');
+    if (!v('fExam') || !v('fProject')) {
+      el('formErr').textContent = '请填写检测类型和工程名称';
+      if (!v('fExam')) el('fExam').classList.add('err');
       if (!v('fProject')) el('fProject').classList.add('err');
       return;
     }
@@ -271,18 +331,24 @@
     var msg = '';
     chips.forEach(function (c) {
       var o = Store.chipOwner(c, editingId);
-      if (o && !msg) msg = c + ' 已绑定到 ' + (o.code || o.project);
+      if (o && !msg) msg = c + ' 已绑定到 ' + desc(o);
     });
     if (msg && !confirm(msg + '\n\n仍要保存？')) return;
+    var sendDate = Store.isAutoSend(el('fCure').value)
+      ? (Store.addDays(v('fMade'), v('fAge')) || v('fSend'))
+      : v('fSend');
     var rec = {
-      id: editingId, code: v('fCode'), project: v('fProject'), spec: v('fSpec'),
-      cure: el('fCure').value, madeDate: v('fMade'), sendDate: v('fSend'),
+      id: editingId,
+      examType: v('fExam'), project: v('fProject'), part: v('fPart'), grade: v('fGrade'),
+      spec: v('fSpec'), cure: el('fCure').value,
+      madeDate: v('fMade'), age: v('fAge'), temp: v('fTemp'), sendDate: sendDate,
       chip1: v('fChip1'), chip2: v('fChip2'), chip3: v('fChip3'), remark: v('fRemark')
     };
     if (editingId) {
       var old = Store.get(editingId);
-      rec.status = old ? old.status : '待核验';
+      rec.status = old ? old.status : '待核实';
       rec.confirmedAt = old ? old.confirmedAt : '';
+      rec.hitChip = old && old.hitChip && chips.indexOf(Store.normCode(old.hitChip)) >= 0 ? old.hitChip : '';
     }
     if (!Store.save(rec)) { el('formErr').textContent = '保存失败'; return; }
     el('formModal').classList.remove('show');
@@ -298,18 +364,32 @@
     n.className = 'v' + (c ? '' : ' idle');
     if (!c) el('btnNewFromScan').style.display = 'none';
   }
-  /* 识别成功后的匹配提示；未登记时给出「登记为新试件」入口 */
-  function afterCode(code) {
-    var hit = Store.matchRaw(code);
+  var FIELD_CN = { chip1: '芯片号1', chip2: '芯片号2', chip3: '芯片号3' };
+  /* 命中芯片号 → 卡片刻标色 + 状态置为「已核实」 */
+  function applyScan(raw) {
+    var hit = Store.findChip(raw);
     el('btnNewFromScan').style.display = 'none';
     if (!hit) {
-      el('btnNewFromScan').textContent = '➕ 登记 ' + code;
+      el('btnNewFromScan').textContent = '➕ 登记 ' + raw;
       el('btnNewFromScan').style.display = '';
-      setStatus('识别到 ' + code + '，清单里没有 —— 点「登记为新试件」存入数据库', 'err');
-      return;
+      setStatus('识别到 ' + raw + '，芯片号1/2/3 都没匹配 —— 点「登记为新试件」存入数据库', 'err');
+      return null;
     }
-    if (hit.status === '已确认') setStatus('匹配：' + hit.code + '（已确认）', 'ok');
-    else setStatus('匹配：' + hit.code + '，点「确认核验」', 'ok');
+    var wasDone = hit.rec.status === '已核实' && Store.normCode(hit.rec.hitChip) === Store.normCode(hit.chip);
+    var res = Store.confirm(hit.rec.id, hit.chip);
+    Store.logScan(hit.chip, true, res.id);
+    render();
+    var where = FIELD_CN[hit.field] || '芯片号';
+    setStatus('已核实：命中 ' + where + '「' + hit.chip + '」· ' + (res.examType || '') +
+      (res.part ? ' / ' + res.part : '') + (wasDone ? '（此前已核实）' : ''), 'ok');
+    if (!wasDone) U.toast('已核实：' + where + ' ' + hit.chip, 'ok');
+    var node = document.querySelector('#mList .m-rec[data-id="' + res.id + '"]');
+    if (node && node.scrollIntoView) node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    return res;
+  }
+  /* 识别成功后的处理：命中即核验，未登记给「登记为新试件」入口 */
+  function afterCode(code) {
+    applyScan(code);
   }
   function setStatus(m, cls) {
     var n = el('scanStatus');
@@ -359,27 +439,19 @@
   }
   function doConfirm() {
     var code = v('manualCode') || lastCode;
-    if (!code) { U.toast('还没有识别到编号', 'err'); return; }
-    var hit = Store.matchRaw(code);
-    if (!hit) {
+    if (!code) { U.toast('请先扫码或输入芯片号', 'err'); return; }
+    var res = applyScan(code);
+    if (!res) {
       Store.logScan(code, false, '');
-      el('btnNewFromScan').textContent = '➕ 登记 ' + code;
-      el('btnNewFromScan').style.display = '';
-      setStatus('未找到 ' + code + ' 的登记记录 —— 点「登记为新试件」存入数据库', 'err');
-      U.toast('未找到匹配记录，可登记为新试件', 'err');
+      U.toast('芯片号1/2/3 都没有匹配记录', 'err');
       return;
     }
-    if (hit.status === '已确认') { setStatus(hit.code + ' 已确认过', 'ok'); U.toast('该试件已确认', 'ok'); render(); return; }
-    Store.confirm(hit.id);
-    Store.logScan(code, true, hit.id);
-    setStatus('核验成功：' + hit.code, 'ok');
-    U.toast('核验成功：' + hit.code, 'ok');
     setCode(''); el('manualCode').value = '';
-    render();
+    lastCode = '';
   }
 
   /* 事件 */
-  el('btnAdd').onclick = openAdd;
+  el('btnAdd').onclick = function () { openAdd(); };
   el('btnSave').onclick = saveForm;
   el('btnScan').onclick = function () {
     el('scanModal').classList.add('show');
@@ -389,9 +461,9 @@
   el('btnStop').onclick = stopScan;
   el('btnConfirm').onclick = doConfirm;
   el('btnFill').onclick = function () {
-    if (!v('manualCode')) { U.toast('请输入编号', 'err'); return; }
+    if (!v('manualCode')) { U.toast('请输入芯片号', 'err'); return; }
     setCode(Store.normCode(v('manualCode')));
-    setStatus('已填入 ' + lastCode);
+    doConfirm();
   };
   el('btnPhoto').onclick = doPhotoScan;
   el('scanFile').addEventListener('change', onScanFile);

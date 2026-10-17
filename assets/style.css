@@ -156,6 +156,31 @@ table.grid .chip { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, m
 table.grid .muted { color: var(--ink-4); }
 table.grid td.act { text-align: right; white-space: nowrap; }
 table.grid th.act { text-align: right; }
+table.grid .strong { font-weight: 700; color: var(--ink); }
+table.grid .num { font-variant-numeric: tabular-nums; }
+table.grid .grade { display: inline-block; padding: 1px 7px; border-radius: 6px; background: var(--pri-l); color: var(--pri); font-weight: 700; font-size: 12px; }
+/* 16 列宽表：横向滚动，前两列吸附 */
+table.tbl-wide { min-width: 1560px; }
+table.tbl-wide thead th:nth-child(1), table.tbl-wide tbody td:nth-child(1) { position: sticky; left: 0; background: inherit; z-index: 1; }
+table.tbl-wide thead th:nth-child(2), table.tbl-wide tbody td:nth-child(2) { position: sticky; left: 38px; background: inherit; z-index: 1; }
+table.tbl-wide thead th:nth-child(1), table.tbl-wide thead th:nth-child(2) { background: #f6f9fc; }
+table.tbl-wide tbody tr { background: #fff; }
+table.tbl-wide tbody tr:hover { background: #f8fbff; }
+table.tbl-wide tbody tr.sel { background: #f1f8ff; }
+
+/* 扫码命中的芯片号：标黄高亮 */
+.chip-hit {
+  display: inline-block; padding: 2px 7px; border-radius: 6px;
+  background: #fff3bf; color: #8a5a00; font-weight: 800;
+  box-shadow: inset 0 0 0 2px #f0b429;
+  animation: hitPulse .8s ease-out 2;
+}
+@keyframes hitPulse {
+  0% { box-shadow: inset 0 0 0 2px #f0b429, 0 0 0 0 rgba(240, 180, 41, .55); }
+  100% { box-shadow: inset 0 0 0 2px #f0b429, 0 0 0 9px rgba(240, 180, 41, 0); }
+}
+tr.row-hit > td { background: #fffbe8 !important; }
+.inp.ro { background: #f6f9fc; color: var(--ink-2); }
 .chk { width: 15px; height: 15px; accent-color: var(--pri); cursor: pointer; }
 
 .badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 20px; font-size: 11.5px; font-weight: 700; white-space: nowrap; background: #eef2f7; color: var(--ink-3); }
@@ -254,6 +279,9 @@ table.grid th.act { text-align: right; }
 .m-rec .t1 { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 700; }
 .m-rec .t2 { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
 .m-rec .t3 { font-size: 11.5px; color: var(--ink-4); margin-top: 2px; font-family: ui-monospace, Menlo, monospace; }
+.m-rec .t1 .grade { display: inline-block; padding: 0 6px; border-radius: 5px; background: var(--pri-l); color: var(--pri); font-size: 11.5px; font-weight: 700; font-family: inherit; }
+.m-chip { display: inline-block; padding: 1px 6px; border-radius: 5px; background: #f1f5f9; color: var(--ink-2); margin-right: 4px; }
+.m-chip.chip-hit { background: #fff3bf; color: #8a5a00; font-weight: 800; box-shadow: inset 0 0 0 1.5px #f0b429; font-family: ui-monospace, Menlo, monospace; }
 
 .m-bottom { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; background: rgba(255, 255, 255, .97); border-top: 1px solid var(--line); display: flex; gap: 5px; padding: 7px 8px calc(7px + env(safe-area-inset-bottom)); backdrop-filter: blur(10px); }
 .m-bottom button { flex: 1; border: 0; background: transparent; padding: 7px 2px; border-radius: 9px; font-size: 11px; color: var(--ink-2); font-weight: 600; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; }

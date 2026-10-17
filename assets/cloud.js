@@ -85,16 +85,21 @@
   /* ---------------- 记录 <-> 云端字段 ---------------- */
   function toWire(rec) {
     return {
-      code: rec.code || '',
+      examType: rec.examType || '',
       project: rec.project || '',
+      part: rec.part || '',
+      grade: rec.grade || '',
       spec: rec.spec || '',
-      cure: rec.cure || '',
       madeDate: rec.madeDate || '',
+      age: rec.age === '' || rec.age === undefined ? '' : rec.age,
+      temp: rec.temp === '' || rec.temp === undefined ? '' : rec.temp,
+      cure: rec.cure || '',
       sendDate: rec.sendDate || '',
       chip1: rec.chip1 || '',
       chip2: rec.chip2 || '',
       chip3: rec.chip3 || '',
-      status: rec.status === '已确认' ? '已确认' : '待核验',
+      hitChip: rec.hitChip || '',
+      status: rec.status === '已核实' ? '已核实' : '待核实',
       archived: rec.archived === true,
       remark: rec.remark || ''
     };
@@ -102,19 +107,28 @@
   function fromWire(w) {
     return {
       rid: w.rid || '',
-      code: w.code || '',
+      examType: w.examType || '',
       project: w.project || '',
+      part: w.part || '',
+      grade: w.grade || '',
       spec: w.spec || '',
-      cure: w.cure || '',
       madeDate: w.madeDate || '',
+      age: w.age === undefined || w.age === null ? '' : String(w.age),
+      temp: w.temp === undefined || w.temp === null ? '' : String(w.temp),
+      cure: w.cure || '',
       sendDate: w.sendDate || '',
       chip1: w.chip1 || '',
       chip2: w.chip2 || '',
       chip3: w.chip3 || '',
-      status: w.status === '已确认' ? '已确认' : '待核验',
+      hitChip: w.hitChip || '',
+      status: (w.status === '已核实' || w.status === '已确认') ? '已核实' : '待核实',
       archived: w.archived === true,
       remark: w.remark || ''
     };
+  }
+  /* 业务唯一键：检测类型 + 工程名称 + 部位 + 送检日期 */
+  function keyOf(r) {
+    return [r.examType || '', r.project || '', r.part || '', r.sendDate || ''].join('|');
   }
 
   /* ---------------- 队列 ---------------- */
@@ -227,21 +241,26 @@
     Cloud.state = 'syncing'; paint();
     return post('/api/list', {}).then(function (d) {
       var remote = (d.records || []).map(fromWire).filter(function (r) {
-        return r.code || r.project; /* 过滤空行/表头垃圾行 */
+        return r.examType || r.project; /* 过滤空行/表头垃圾行 */
       });
       var byRid = {}, byKey = {};
       remote.forEach(function (r) {
         if (r.rid) byRid[r.rid] = r;
-        byKey[(r.code + '|' + r.sendDate)] = r;
+        byKey[keyOf(r)] = r;
       });
 
       var locals = localList();
       var seen = {};
       var pendingCreates = [];
+      var localRid = {}, localKey = {};
+      locals.forEach(function (l) {
+        if (l.rid) localRid[l.rid] = true;
+        localKey[keyOf(l)] = true;
+      });
       suspend++;
       try {
         locals.forEach(function (l) {
-          var hit = (l.rid && byRid[l.rid]) || byKey[l.code + '|' + l.sendDate];
+          var hit = (l.rid && byRid[l.rid]) || byKey[keyOf(l)];
           if (hit) {
             seen[hit.rid] = true;
             var merged = fromWire(hit);
@@ -250,19 +269,36 @@
             merged.createdAt = l.createdAt;
             merged.confirmedAt = l.confirmedAt;
             merged.archivedAt = l.archivedAt;
-            if (merged.status === '已确认' && !merged.confirmedAt) merged.confirmedAt = new Date().toISOString();
+            if (merged.status === '已核实' && !merged.confirmedAt) merged.confirmedAt = new Date().toISOString();
             Store.save(merged);
           } else if (!l.rid) {
             /* 本地新增、云端还没有 —— 稍后补传 */
             pendingCreates.push(l);
           }
         });
-        /* 云端已删除的（有 rid 但云端没有）→ 本地同步删除，但有待办的不动 */
+        /* 云端有、本地没有（换设备 / 换浏览器打开）→ 落一份到本地 */
+        remote.forEach(function (r) {
+          if (seen[r.rid]) return;
+          if (r.rid && localRid[r.rid]) return;
+          if (localKey[keyOf(r)]) return;
+          var fresh = fromWire(r);
+          fresh.id = '';
+          var saved = Store.save(fresh);
+          if (saved) {
+            seen[r.rid] = true;
+            localRid[r.rid] = true;
+            localKey[keyOf(r)] = true;
+          }
+        });
+        /* 云端已删除的（有 rid 但云端没有）→ 本地同步删除，但有待办的不动。
+           注意：只有云端确实返回了数据才做这个判断，避免接口异常返回空表时把本地清空。 */
         var pendingRid = {};
         queue.forEach(function (q) { if (q.rid) pendingRid[q.rid] = true; });
-        locals.forEach(function (l) {
-          if (l.rid && !byRid[l.rid] && !pendingRid[l.rid] && !seen[l.rid]) Store.remove(l.id);
-        });
+        if (remote.length) {
+          locals.forEach(function (l) {
+            if (l.rid && !byRid[l.rid] && !pendingRid[l.rid] && !seen[l.rid]) Store.remove(l.id);
+          });
+        }
       } finally {
         suspend--;
       }

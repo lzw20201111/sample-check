@@ -31,13 +31,14 @@
     setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 400);
   }
 
-  var HEAD = ['序号', '试件编号', '工程名称', '规格型号', '养护类型', '成型日期', '送检日期', '芯片号1', '芯片号2', '芯片号3', '核验状态', '备注'];
+  var HEAD = ['序号', '送检日期', '检测类型', '工程名称', '部位', '等级', '规格型号', '成型日期',
+    '芯片号1', '芯片号2', '芯片号3', '温度(℃)', '龄期(d)', '养护类型', '状态', '备注'];
 
   function toMatrix(records, withIndex) {
     var rows = [HEAD];
     records.forEach(function (r, i) {
-      rows.push([withIndex === false ? '' : (i + 1), r.code, r.project, r.spec, r.cure, r.madeDate, r.sendDate,
-        r.chip1, r.chip2, r.chip3, r.status, r.remark]);
+      rows.push([withIndex === false ? '' : (i + 1), r.sendDate, r.examType, r.project, r.part, r.grade, r.spec, r.madeDate,
+        r.chip1, r.chip2, r.chip3, r.temp, r.age, r.cure, r.status, r.remark]);
     });
     return rows;
   }

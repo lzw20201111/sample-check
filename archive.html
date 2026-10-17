@@ -47,21 +47,25 @@
     </div>
 
     <div class="table-wrap">
-      <table class="grid">
+      <table class="grid tbl-wide">
         <thead>
           <tr>
             <th style="width:38px"></th>
             <th style="width:52px">序号</th>
-            <th>试件编号</th>
-            <th>工程名称</th>
-            <th>规格型号</th>
-            <th>养护类型</th>
-            <th>成型日期</th>
             <th>送检日期</th>
+            <th>检测类型</th>
+            <th>工程名称</th>
+            <th>部位</th>
+            <th>等级</th>
+            <th>规格型号</th>
+            <th>成型日期</th>
             <th>芯片号1</th>
             <th>芯片号2</th>
             <th>芯片号3</th>
-            <th>核验状态</th>
+            <th>温度(℃)</th>
+            <th>龄期(d)</th>
+            <th>养护类型</th>
+            <th>状态</th>
             <th class="act" style="width:86px">操作</th>
           </tr>
         </thead>
@@ -93,24 +97,32 @@
 
   function el(id) { return document.getElementById(id); }
 
+  function chipCell(r, val) {
+    if (!val) return '<td class="chip muted">—</td>';
+    var on = r.hitChip && Store.normCode(r.hitChip) === Store.normCode(val);
+    return '<td class="chip"><span class="' + (on ? 'chip-hit' : '') + '">' + U.esc(val) + '</span></td>';
+  }
+
   function render() {
     var list = Store.archivedAll();
     el('hint').textContent = '共 ' + list.length + ' 条';
     el('tbody').innerHTML = list.map(function (r, i) {
       var isSel = !!selected[r.id];
-      var badge = r.status === '已确认' ? '<span class="badge ok">已确认</span>' : '<span class="badge warn">待核验</span>';
+      var badge = r.status === '已核实' ? '<span class="badge ok">已核实</span>' : '<span class="badge warn">待核实</span>';
       return '<tr data-id="' + r.id + '" class="' + (isSel ? 'sel' : '') + '">' +
         '<td><input class="chk rowChk" type="checkbox" ' + (isSel ? 'checked' : '') + '></td>' +
         '<td class="muted">' + (i + 1) + '</td>' +
-        '<td class="code">' + U.esc(r.code || '—') + '</td>' +
+        '<td class="nowrap strong">' + U.esc(r.sendDate || '—') + '</td>' +
+        '<td class="code">' + U.esc(r.examType || '—') + '</td>' +
         '<td>' + U.esc(r.project || '—') + '</td>' +
+        '<td>' + U.esc(r.part || '—') + '</td>' +
+        '<td class="nowrap"><span class="grade">' + U.esc(r.grade || '—') + '</span></td>' +
         '<td class="nowrap">' + U.esc(r.spec || '—') + '</td>' +
-        '<td class="nowrap">' + U.esc(r.cure || '—') + '</td>' +
         '<td class="nowrap">' + U.esc(r.madeDate || '—') + '</td>' +
-        '<td class="nowrap">' + U.esc(r.sendDate || '—') + '</td>' +
-        '<td class="chip">' + U.esc(r.chip1 || '—') + '</td>' +
-        '<td class="chip">' + U.esc(r.chip2 || '—') + '</td>' +
-        '<td class="chip">' + U.esc(r.chip3 || '—') + '</td>' +
+        chipCell(r, r.chip1) + chipCell(r, r.chip2) + chipCell(r, r.chip3) +
+        '<td class="nowrap num">' + U.esc(r.temp === '' ? '—' : r.temp) + '</td>' +
+        '<td class="nowrap num">' + (r.age === '' ? '—' : U.esc(r.age) + ' d') + '</td>' +
+        '<td class="nowrap">' + U.esc(r.cure || '—') + '</td>' +
         '<td>' + badge + '</td>' +
         '<td class="act"><button class="icon-btn" data-act="restore" title="撤回">↩</button>' +
         '<button class="icon-btn del" data-act="del" title="彻底删除">✕</button></td>' +
@@ -119,12 +131,14 @@
 
     el('mList').innerHTML = list.map(function (r) {
       var isSel = !!selected[r.id];
-      var badge = r.status === '已确认' ? '<span class="badge ok">已确认</span>' : '<span class="badge warn">待核验</span>';
+      var badge = r.status === '已核实' ? '<span class="badge ok">已核实</span>' : '<span class="badge warn">待核实</span>';
       return '<div class="mrow" data-id="' + r.id + '">' +
         '<input class="chk rowChk" type="checkbox" ' + (isSel ? 'checked' : '') + ' style="margin-top:3px">' +
-        '<div class="l"><div class="t1">' + U.esc(r.code || '—') + '</div>' +
-        '<div class="t2">' + U.esc(r.project || '—') + badge + '</div>' +
-        '<div class="t3">' + U.esc(r.spec || '') + ' · ' + U.esc(r.cure || '') + ' · 送检 ' + U.esc(r.sendDate || '—') + '</div></div>' +
+        '<div class="l"><div class="t1">' + U.esc(r.examType || '—') +
+        (r.grade ? ' · ' + U.esc(r.grade) : '') + '</div>' +
+        '<div class="t2">' + U.esc(r.project || '—') + (r.part ? ' · ' + U.esc(r.part) : '') + badge + '</div>' +
+        '<div class="t3">送检 ' + U.esc(r.sendDate || '—') + ' · ' + U.esc(r.cure || '') +
+        (r.chip1 ? ' · ' + U.esc(r.chip1) : '') + '</div></div>' +
         '<button class="icon-btn" data-act="restore" type="button" title="撤回">↩</button></div>';
     }).join('');
 
@@ -180,7 +194,8 @@
   function del(id) {
     var r = Store.get(id);
     if (!r) return;
-    if (!confirm('彻底删除该归档记录？\n\n' + r.code + ' · ' + r.project + '\n删除后不可恢复。')) return;
+    var t = [r.examType, r.grade, r.part].filter(Boolean).join(' · ') || r.project || '该记录';
+    if (!confirm('彻底删除该归档记录？\n\n' + t + '\n删除后不可恢复。')) return;
     Store.remove(id); delete selected[id];
     U.toast('已删除', 'ok'); render();
   }
