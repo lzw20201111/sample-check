@@ -14,7 +14,7 @@
   .hd .mark { width: 54px; height: 54px; border-radius: 14px; margin: 0 auto 14px; font-size: 22px; }
   .hd h1 { font-size: 22px; letter-spacing: -.3px; }
   .hd p { font-size: 13px; color: var(--ink-3); margin-top: 6px; }
-  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
   .ec { display: block; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 20px 18px; box-shadow: var(--sh); transition: .18s; color: var(--ink); }
   .ec:hover { transform: translateY(-3px); border-color: #b9d3e9; box-shadow: 0 22px 36px -24px rgba(15, 27, 45, .45); }
   .ec .i { font-size: 24px; }
@@ -42,6 +42,11 @@
       <div class="i">📱</div>
       <h3>手机版</h3>
       <p>现场单手录入，状态标签切换、底部归档/导入/导出。</p>
+    </a>
+    <a class="ec" href="batch.html">
+      <div class="i">🚚</div>
+      <h3>本次送检</h3>
+      <p>从清单勾选本批试件，现场扫码核验芯片号，改动实时同步。</p>
     </a>
     <a class="ec" href="archive.html">
       <div class="i">🗂</div>
