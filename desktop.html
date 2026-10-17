@@ -78,6 +78,7 @@
           <h2 id="listTitle">送检清单</h2>
           <span class="hint" id="listHint">共 0 条</span>
           <div class="right">
+            <button class="btn btn-sm" type="button" id="btnBatchSel" disabled>🚚 加入本次送检</button>
             <button class="btn btn-sm" type="button" id="btnScan"><span class="i">📷</span>扫码核验</button>
             <button class="btn btn-sm" type="button" id="btnAdd2">+ 新增</button>
           </div>
@@ -358,6 +359,7 @@
     el('btnArchiveSel2').disabled = !n;
     el('btnDelSel').disabled = !n;
     el('btnArchiveSel').disabled = !n;
+    el('btnBatchSel').disabled = !n;
   }
 
   /* 记录摘要文案：检测类型 · 等级 · 部位 */
@@ -676,6 +678,14 @@
   }
   el('btnArchiveSel').onclick = archiveSelected;
   el('btnArchiveSel2').onclick = archiveSelected;
+  /* 加入本次送检：把勾选的记录加入批次（已加入的不重复计数） */
+  el('btnBatchSel').onclick = function () {
+    var ids = Object.keys(selected).filter(function (k) { return selected[k]; });
+    if (!ids.length) { U.toast('请先勾选要加入的记录', 'err'); return; }
+    var n = Store.addToBatch(ids);
+    U.toast(n ? '已加入 ' + n + ' 条到本次送检' : '选中的记录都已在本次送检里', n ? 'ok' : 'err');
+    render();
+  };
   el('btnDelSel').onclick = function () {
     var ids = Object.keys(selected).filter(function (k) { return selected[k]; });
     if (!ids.length) { U.toast('请先勾选记录', 'err'); return; }
