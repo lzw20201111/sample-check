@@ -131,6 +131,9 @@
       archived: r.archived === true || r.archived === 'true',
       archivedAt: r.archivedAt || '',
       confirmedAt: r.confirmedAt || '',
+      /* 本次送检批次：batch=true 表示已加入本次送检；batchAt 为加入日期 */
+      batch: r.batch === true || r.batch === 'true' || !!String(r.batchAt || '').trim(),
+      batchAt: String(r.batchAt || '').trim(),
       remark: r.remark || '',
       /* 兼容旧数据（试件编号已由检测类型替代，保留原值不丢） */
       code: String(r.code || '').trim(),
@@ -281,6 +284,63 @@
         if (set[r.id] && r.archived) { r.archived = false; r.archivedAt = ''; n++; }
       });
       write(list);
+      return n;
+    },
+
+    /* ---------------- 本次送检批次 ---------------- */
+    batchAll: function (opts) {
+      var o = opts || {};
+      var list = read().filter(function (r) { return !r.archived; }).map(normalize)
+        .filter(function (r) { return r.batch === true; });
+      if (o.status) list = list.filter(function (r) { return r.status === o.status; });
+      if (o.q) {
+        var q = String(o.q).trim().toLowerCase();
+        list = list.filter(function (r) {
+          return [r.examType, r.project, r.part, r.grade, r.spec, r.cure,
+            r.chip1, r.chip2, r.chip3, r.remark]
+            .join(' ').toLowerCase().indexOf(q) >= 0;
+        });
+      }
+      return sortNewest(list);
+    },
+    batchStats: function () {
+      var list = read().filter(function (r) { return !r.archived; }).map(normalize)
+        .filter(function (r) { return r.batch === true; });
+      var done = list.filter(function (r) { return r.status === STATUS.DONE; }).length;
+      return { total: list.length, done: done, pending: list.length - done };
+    },
+    /* 加入本次送检（已加入的不重复计数） */
+    addToBatch: function (ids) {
+      var set = {};
+      (ids || []).forEach(function (i) { set[i] = true; });
+      var list = read(), n = 0, d = today();
+      list.forEach(function (r) {
+        if (set[r.id] && !r.archived && r.batch !== true) {
+          r.batch = true;
+          r.batchAt = r.batchAt || d;
+          n++;
+        }
+      });
+      if (n) write(list);
+      return n;
+    },
+    /* 移出本次送检（不删除记录，仍在主清单） */
+    removeFromBatch: function (ids) {
+      var set = {};
+      (ids || []).forEach(function (i) { set[i] = true; });
+      var list = read(), n = 0;
+      list.forEach(function (r) {
+        if (set[r.id] && r.batch === true) { r.batch = false; r.batchAt = ''; n++; }
+      });
+      if (n) write(list);
+      return n;
+    },
+    clearBatch: function () {
+      var list = read(), n = 0;
+      list.forEach(function (r) {
+        if (r.batch === true) { r.batch = false; r.batchAt = ''; n++; }
+      });
+      if (n) write(list);
       return n;
     },
 
