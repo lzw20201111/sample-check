@@ -207,9 +207,12 @@
       var isSel = !!selected[r.id];
       var badge = r.status === '已核实' ? '<span class="badge ok">已核实</span>' : '<span class="badge warn">待核实</span>';
       var hit = Store.normCode(r.hitChip);
+      var dups = Store.dupChips ? Store.dupChips() : {};
       var chips = [r.chip1, r.chip2, r.chip3].filter(Boolean).map(function (c) {
         var on = hit && Store.normCode(c) === hit;
-        return '<span class="m-chip' + (on ? ' chip-hit' : '') + '">' + U.esc(c) + '</span>';
+        var dup = dups[Store.normCode(c)] > 1;
+        return '<span class="m-chip' + (on ? ' chip-hit' : '') + (dup ? ' chip-dup' : '') + '">' + U.esc(c) +
+          (dup ? '<i class="dup-tag">重复</i>' : '') + '</span>';
       }).join('');
       var meta = [];
       if (r.age !== '') meta.push('龄期 ' + U.esc(r.age) + 'd');
@@ -472,11 +475,13 @@
     if (!editingId) return;
     var r = Store.get(editingId);
     if (!r) return;
-    if (!confirm('删除这条记录？\n\n' + desc(r) + '\n' + (r.project || '') + '\n\n删除后会同步从飞书表格中移除，且不可恢复。')) return;
-    Store.remove(editingId);
-    el('formModal').classList.remove('show');
-    editingId = '';
-    U.toast('已删除并同步', 'ok'); render();
+    U.confirmDelete({ message: '删除这条记录？\n' + desc(r) + '\n' + (r.project || ''),
+      onOk: function () {
+        Store.remove(editingId);
+        el('formModal').classList.remove('show');
+        editingId = '';
+        U.toast('已删除并同步', 'ok'); render();
+      } });
   };
   el('btnScan').onclick = function () {
     el('scanModal').classList.add('show');
