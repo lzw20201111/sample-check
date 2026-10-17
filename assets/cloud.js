@@ -43,6 +43,8 @@
   var queue = readJSON(QKEY, []);
   if (!Array.isArray(queue)) queue = [];
   var flushing = false;
+  var retryTimer = null;
+  var failStreak = 0;
 
   var Cloud = {
     api: resolveApi(),
@@ -116,6 +118,7 @@
   }
 
   /* ---------------- 队列 ---------------- */
+  var seq = 0;
   function saveQueue() { writeJSON(QKEY, queue.slice(0, 800)); }
 
   function enqueue(op) {
@@ -128,11 +131,20 @@
       if (op.op === 'update' && q.op === 'update' && q.rid && q.rid === op.rid) { queue.splice(i, 1); continue; }
       if (op.op === 'delete' && q.rid && (q.rid === op.rid)) { queue.splice(i, 1); continue; }
     }
+    op._id = ++seq;
     queue.push(op);
     saveQueue();
     Cloud.state = 'syncing';
     paint();
     Cloud.flush();
+  }
+
+  /* 精确移除“已处理完”的那个任务：不能按位置 shift，
+     否则任务在途时被新快照顶替，会把新任务误删掉 */
+  function dropOp(op) {
+    for (var i = 0; i < queue.length; i++) {
+      if (queue[i] === op || (op._id && queue[i]._id === op._id)) { queue.splice(i, 1); return; }
+    }
   }
 
   Cloud.flush = function () {
@@ -146,20 +158,34 @@
       var op = queue[0];
       var p;
       if (op.op === 'create') {
-        p = post('/api/create', op.data).then(function (d) {
-          if (d.rid) Store.setRid(op.id, d.rid);
-          queue.shift(); saveQueue();
-        });
+        /* 发送那一刻才取本地最新值：保存后立刻核验/再编辑，也能一次写对 */
+        p = Promise.resolve().then(function () {
+          var rec = Store.get(op.id);
+          if (!rec) return null; /* 已被删除，不用建 */
+          if (rec.rid) return post('/api/update', Object.assign({ rid: rec.rid }, toWire(rec)));
+          return post('/api/create', toWire(rec)).then(function (d) {
+            if (d.rid) Store.setRid(op.id, d.rid);
+          });
+        }).then(function () { dropOp(op); saveQueue(); });
       } else if (op.op === 'update') {
-        p = post('/api/update', Object.assign({ rid: op.rid }, op.data)).then(function () {
-          queue.shift(); saveQueue();
-        });
+        p = Promise.resolve().then(function () {
+          var rec = Store.get(op.id);
+          var rid = (rec && rec.rid) || op.rid;
+          if (!rid) {
+            if (!rec) return null;
+            return post('/api/create', toWire(rec)).then(function (d) {
+              if (d.rid) Store.setRid(op.id, d.rid);
+            });
+          }
+          var data = rec ? toWire(rec) : (op.data || {});
+          return post('/api/update', Object.assign({ rid: rid }, data));
+        }).then(function () { dropOp(op); saveQueue(); });
       } else if (op.op === 'delete') {
         p = post('/api/delete', { rid: op.rid }).then(function () {
-          queue.shift(); saveQueue();
+          dropOp(op); saveQueue();
         });
       } else {
-        queue.shift(); saveQueue();
+        dropOp(op); saveQueue();
         return step();
       }
       return p.then(step);
@@ -169,13 +195,25 @@
       flushing = false;
       Cloud.state = 'cloud';
       Cloud.error = '';
+      if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+      failStreak = 0;
       paint();
+      notify();
     }).catch(function (e) {
       flushing = false;
       Cloud.state = 'offline';
       Cloud.error = e && e.message ? e.message : '网络异常';
       log('sync fail', Cloud.error);
       paint();
+      /* 失败退避重试：4s 起步，最长 60s，避免对不可达服务器狂打 */
+      failStreak++;
+      if (queue.length && !retryTimer) {
+        var delay = Math.min(4000 * failStreak, 60000);
+        retryTimer = setTimeout(function () {
+          retryTimer = null;
+          if (queue.length) Cloud.flush();
+        }, delay);
+      }
     });
   };
 

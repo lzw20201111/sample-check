@@ -131,6 +131,12 @@
         <button class="btn" type="button" id="btnStop">关闭</button>
         <button class="btn" type="button" id="btnConfirm">确认核验</button>
       </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <button class="btn" type="button" id="btnPhoto" style="flex:1">🖼 拍照/选图识别</button>
+        <button class="btn" type="button" id="btnTorch" style="display:none">🔦</button>
+        <button class="btn btn-pri" type="button" id="btnNewFromScan" style="display:none">➕ 登记为新试件</button>
+        <input type="file" id="scanFile" accept="image/*" style="display:none">
+      </div>
     </div>
   </div>
 </div>
@@ -148,7 +154,7 @@
   var state = { status: '', q: '' };
   var selected = {};
   var editingId = '';
-  var scanHandle = null, lastCode = '';
+  var scanHandle = null, lastCode = '', torchOn = false;
 
   function el(id) { return document.getElementById(id); }
   function v(id) { return el(id).value.trim(); }
@@ -232,12 +238,13 @@
   }
 
   /* 表单 */
-  function openAdd() {
+  function openAdd(prefillChip) {
     editingId = '';
     el('mTitle').textContent = '新增送检记录';
     ['fCode', 'fProject', 'fSpec', 'fChip1', 'fChip2', 'fChip3', 'fRemark'].forEach(function (id) { el(id).value = ''; });
     el('fCure').value = '标准养护';
     el('fMade').value = Store.today(); el('fSend').value = Store.today();
+    if (prefillChip) el('fChip1').value = prefillChip;
     el('formErr').textContent = '';
     el('formModal').classList.add('show');
   }
@@ -289,6 +296,20 @@
     var n = el('scanCode');
     n.textContent = c || '—';
     n.className = 'v' + (c ? '' : ' idle');
+    if (!c) el('btnNewFromScan').style.display = 'none';
+  }
+  /* 识别成功后的匹配提示；未登记时给出「登记为新试件」入口 */
+  function afterCode(code) {
+    var hit = Store.matchRaw(code);
+    el('btnNewFromScan').style.display = 'none';
+    if (!hit) {
+      el('btnNewFromScan').textContent = '➕ 登记 ' + code;
+      el('btnNewFromScan').style.display = '';
+      setStatus('识别到 ' + code + '，清单里没有 —— 点「登记为新试件」存入数据库', 'err');
+      return;
+    }
+    if (hit.status === '已确认') setStatus('匹配：' + hit.code + '（已确认）', 'ok');
+    else setStatus('匹配：' + hit.code + '，点「确认核验」', 'ok');
   }
   function setStatus(m, cls) {
     var n = el('scanStatus');
@@ -299,20 +320,35 @@
     el('video').style.display = 'block';
     el('scanPh').style.display = 'none';
     el('scanFrame').style.display = 'block';
+    el('btnTorch').style.display = 'none';
+    torchOn = false;
     setStatus('正在启动摄像头…');
     scanHandle = Scanner.start(el('video'), function (code) {
       setCode(code);
-      var hit = Store.findByCode(code);
-      if (!hit) setStatus('识别到 ' + code + '，清单中没有对应记录', 'err');
-      else if (hit.status === '已确认') setStatus('匹配：' + hit.code + '（已确认）', 'ok');
-      else setStatus('匹配：' + hit.code + '，点「确认核验」', 'ok');
+      afterCode(code);
     }, function (s) {
-      if (s === 'running') setStatus('摄像头已开启，对准芯片', 'ok');
+      if (s === 'running') { setStatus('摄像头已开启，对准芯片', 'ok'); el('btnTorch').style.display = ''; }
       else if (s === 'denied') setStatus('摄像头权限被拒绝，请允许后重试，或手动输入', 'err');
       else if (s === 'nocamera') setStatus('没有可用摄像头，请手动输入编号', 'err');
       else if (s === 'unsupported') setStatus('当前浏览器不支持调用摄像头，请手动输入', 'err');
       else if (s === 'fallback-manual') setStatus('扫码组件加载失败（需联网），请手动输入', 'err');
     });
+  }
+  /* 照片识别：现场对试块拍照更稳，支持闪光补光后拍摄 */
+  function doPhotoScan() {
+    el('scanFile').value = '';
+    el('scanFile').click();
+  }
+  function onScanFile(e) {
+    var f = e.target.files && e.target.files[0];
+    if (!f) return;
+    setStatus('正在识别照片…');
+    Scanner.decodeFile(f).then(function (code) {
+      if (!code) { setStatus('照片里没识别出二维码，靠近一点重拍，或手动输入编号', 'err'); U.toast('未识别出条码', 'err'); return; }
+      setCode(code);
+      afterCode(code);
+      U.toast('已识别：' + code, 'ok');
+    }).catch(function (err) { setStatus(err.message || '照片识别失败', 'err'); });
   }
   function stopScan() {
     if (scanHandle) { scanHandle.stop(); scanHandle = null; }
@@ -324,8 +360,15 @@
   function doConfirm() {
     var code = v('manualCode') || lastCode;
     if (!code) { U.toast('还没有识别到编号', 'err'); return; }
-    var hit = Store.findByCode(code);
-    if (!hit) { Store.logScan(code, false, ''); setStatus('未找到编号 ' + code, 'err'); U.toast('未找到匹配记录', 'err'); return; }
+    var hit = Store.matchRaw(code);
+    if (!hit) {
+      Store.logScan(code, false, '');
+      el('btnNewFromScan').textContent = '➕ 登记 ' + code;
+      el('btnNewFromScan').style.display = '';
+      setStatus('未找到 ' + code + ' 的登记记录 —— 点「登记为新试件」存入数据库', 'err');
+      U.toast('未找到匹配记录，可登记为新试件', 'err');
+      return;
+    }
     if (hit.status === '已确认') { setStatus(hit.code + ' 已确认过', 'ok'); U.toast('该试件已确认', 'ok'); render(); return; }
     Store.confirm(hit.id);
     Store.logScan(code, true, hit.id);
@@ -349,6 +392,23 @@
     if (!v('manualCode')) { U.toast('请输入编号', 'err'); return; }
     setCode(Store.normCode(v('manualCode')));
     setStatus('已填入 ' + lastCode);
+  };
+  el('btnPhoto').onclick = doPhotoScan;
+  el('scanFile').addEventListener('change', onScanFile);
+  el('btnNewFromScan').onclick = function () {
+    var code = lastCode || v('manualCode');
+    if (!code) return;
+    el('scanModal').classList.remove('show');
+    stopScan();
+    openAdd(code);
+  };
+  el('btnTorch').onclick = function () {
+    if (!scanHandle || !scanHandle.torch) return;
+    torchOn = !torchOn;
+    scanHandle.torch(torchOn).then(function (ok) {
+      if (!ok) { U.toast('该设备不支持手电筒', 'err'); torchOn = false; }
+      el('btnTorch').style.background = torchOn ? '#ffd66b' : '';
+    });
   };
   el('manualCode').addEventListener('keydown', function (e) { if (e.key === 'Enter') doConfirm(); });
 

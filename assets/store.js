@@ -207,6 +207,31 @@
       return null;
     },
 
+    /* 扫码容错匹配：二维码内容可能是纯编号，也可能是一段文本/链接里含编号 */
+    matchRaw: function (raw) {
+      var s = String(raw === null || raw === undefined ? '' : raw).trim();
+      if (!s) return null;
+      var hit = Store.findByCode(s);
+      if (hit) return hit;
+      var tokens = s.match(/[0-9A-Za-z_\-]{4,}/g) || [];
+      for (var i = 0; i < tokens.length; i++) {
+        hit = Store.findByCode(tokens[i]);
+        if (hit) return hit;
+      }
+      /* 包含匹配：手写/补打的编号可能混在长串里 */
+      var up = s.toUpperCase();
+      var pool = read().filter(function (r) { return !r.archived; });
+      for (i = 0; i < pool.length; i++) {
+        var r = pool[i];
+        var codes = [r.code, r.chip1, r.chip2, r.chip3].map(normCode).filter(Boolean);
+        for (var j = 0; j < codes.length; j++) {
+          var cd = codes[j];
+          if (cd.length >= 6 && up.indexOf(cd) >= 0) return normalize(r);
+        }
+      }
+      return null;
+    },
+
     /* 芯片号是否已被别的记录占用 */
     chipOwner: function (chip, exceptId) {
       var c = normCode(chip);
