@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>试件归档库｜自适应</title>
+<style>
+  * {
+    box-sizing: border-box;
+    margin:0;
+    padding:0;
+    font-family: "Microsoft YaHei", "PingFang SC", system-ui;
+  }
+  body{
+    background:#f4f6f8;
+    padding:16px;
+  }
+  .container{
+    background:#fff;
+    border-radius:10px;
+    border:1px solid #e5e7eb;
+    padding:16px;
+  }
+  .top-bar{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:16px;
+    flex-wrap:wrap;gap:10px;
+  }
+  h2{
+    font-size:18px;
+  }
+  .btn{
+    padding:8px 12px;
+    border-radius:6px;
+    border:1px solid #d0d5dd;
+    background:#f2f5f8;
+    cursor:pointer;
+    font-size:13px;
+  }
+  .btn-primary{
+    background:#2563eb;
+    color:#fff;
+    border-color:#2563eb;
+  }
+  .btn-success{
+    background:#16a34a;
+    color:#fff;
+    border-color:#16a34a;
+  }
+  .table-wrap{overflow:auto;}
+  table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:13px;
+  }
+  th{
+    background:#f7fafc;
+    text-align:left;
+    padding:10px 8px;
+    border-bottom:1px solid #eef0f3;
+    white-space:nowrap;
+  }
+  td{
+    padding:10px 8px;
+    border-bottom:1px solid #f2f4f7;
+    white-space:nowrap;
+  }
+  .checkbox{
+    width:18px;height:18px;
+    accent-color:#2563eb;
+  }
+  .tag-green{
+    background:#e6f7ee;color:#16a34a;
+    padding:2px 8px;border-radius:10px;font-size:12px;
+  }
+  .tag-orange{
+    background:#fff7e6;color:#f59e0b;
+    padding:2px 8px;border-radius:10px;font-size:12px;
+  }
+  @media(max-width:720px){
+    body{padding:8px;}
+    .container{padding:12px;}
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="top-bar">
+    <h2>📁 试件归档库</h2>
+    <div>
+      <button class="btn btn-success" onclick="rollbackSelected()">撤回选中至主清单</button>
+      <button class="btn btn-primary" onclick="exportArchiveCSV()">导出归档CSV</button>
+      <button class="btn" onclick="window.close()">关闭页面</button>
+    </div>
+  </div>
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th><input type="checkbox" id="archiveCheckAll" class="checkbox" onchange="archiveToggleAll()"></th>
+        <th>序号</th>
+        <th>试件编号</th>
+        <th>工程名称</th>
+        <th>规格型号</th>
+        <th>养护类型</th>
+        <th>成型日期</th>
+        <th>送检日期</th>
+        <th>芯片号1</th>
+        <th>芯片号2</th>
+        <th>芯片号3</th>
+        <th>核验状态</th>
+      </tr>
+    </thead>
+    <tbody id="archiveBody"></tbody>
+  </table>
+  </div>
+</div>
+<script>
+  let archiveList = JSON.parse(localStorage.getItem("sampleArchiveList")) || [];
+  let mainList = JSON.parse(localStorage.getItem("sampleCheckList")) || [];
+
+  function saveArchive(){
+    localStorage.setItem("sampleArchiveList", JSON.stringify(archiveList));
+  }
+  function saveMain(){
+    localStorage.setItem("sampleCheckList", JSON.stringify(mainList));
+  }
+
+  function renderArchive(){
+    const tb = document.getElementById("archiveBody");
+    tb.innerHTML = "";
+    if(archiveList.length ===0){
+      tb.innerHTML = `<tr><td colspan="12" style="text-align:center;padding:30px;color:#888;">归档库为空</td></tr>`;
+      return;
+    }
+    archiveList.forEach((item,idx)=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><input class="checkbox arch-row" data-idx="${idx}" type="checkbox"></td>
+        <td>${idx+1}</td>
+        <td><strong>${item.code||""}</strong></td>
+        <td>${item.project||""}</td>
+        <td>${item.spec||""}</td>
+        <td>${item.cureType||""}</td>
+        <td>${item.formDate||""}</td>
+        <td>${item.sendDate||""}</td>
+        <td>${item.chip1||""}</td>
+        <td>${item.chip2||""}</td>
+        <td>${item.chip3||""}</td>
+        <td>${item.checked ? '<span class="tag-green">已确认</span>':'<span class="tag-orange">待核验</span>'}</td>
+      `;
+      tb.appendChild(tr);
+    })
+  }
+
+  function archiveToggleAll(){
+    const allCb = document.getElementById("archiveCheckAll");
+    document.querySelectorAll(".arch-row").forEach(cb=>cb.checked = allCb.checked);
+  }
+
+  //撤回选中记录回主清单
+  function rollbackSelected(){
+    const sel = [];
+    document.querySelectorAll(".arch-row:checked").forEach(cb=>sel.push(Number(cb.dataset.idx)));
+    if(sel.length===0){
+      alert("请勾选要撤回的归档记录");
+      return;
+    }
+    sel.sort((a,b)=>b-a).forEach(idx=>{
+      mainList.push(archiveList[idx]);
+      archiveList.splice(idx,1);
+    })
+    saveArchive();
+    saveMain();
+    renderArchive();
+    alert(`撤回${sel.length}条记录，回到主送检清单`);
+  }
+
+  function exportArchiveCSV(){
+    if(archiveList.length===0){alert("归档库无数据");return;}
+    let text = "序号,试件编号,工程名称,规格型号,养护类型,成型日期,送检日期,芯片号1,芯片号2,芯片号3,核验状态\n";
+    archiveList.forEach((item,i)=>{
+      text += `${i+1},${item.code||""},${item.project||""},${item.spec||""},${item.cureType||""},${item.formDate||""},${item.sendDate||""},${item.chip1||""},${item.chip2||""},${item.chip3||""},${item.checked?"已确认":"待核验"}\n`;
+    })
+    const blob = new Blob(["\uFEFF"+text], {type:"text/csv;charset=utf-8"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "试件归档清单.csv";
+    a.click();
+  }
+  renderArchive();
+</script>
+</body>
+</html>
