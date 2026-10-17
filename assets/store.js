@@ -135,6 +135,8 @@
       batch: r.batch === true || r.batch === 'true' || !!String(r.batchAt || '').trim(),
       batchAt: String(r.batchAt || '').trim(),
       remark: r.remark || '',
+      /* 序号：导入 Excel 的「序号」列，用于按序号小→大排列（手动新增无序号排在后面） */
+      seq: (function () { var n = parseInt(r.seq, 10); return isFinite(n) ? n : ''; })(),
       /* 兼容旧数据（试件编号已由检测类型替代，保留原值不丢） */
       code: String(r.code || '').trim(),
       createdAt: r.createdAt || 0,
@@ -150,6 +152,11 @@
 
   function sortNewest(list) {
     return list.slice().sort(function (a, b) {
+      /* 有序号的记录（导入 Excel）按序号小→大排在前；其余按送检日期新→旧 */
+      var ha = a.seq !== '' && a.seq !== undefined && isFinite(a.seq);
+      var hb = b.seq !== '' && b.seq !== undefined && isFinite(b.seq);
+      if (ha && hb && a.seq !== b.seq) return a.seq - b.seq;
+      if (ha !== hb) return ha ? -1 : 1;
       var x = (a.sendDate || a.madeDate || '') + '';
       var y = (b.sendDate || b.madeDate || '') + '';
       if (x === y) return (b.createdAt || 0) - (a.createdAt || 0);
@@ -233,6 +240,8 @@
         for (var i = 0; i < list.length; i++) {
           if (list[i].id === r.id) {
             r.createdAt = list[i].createdAt || now;
+            /* 序号不在表单里，编辑/云端合并时保留原值 */
+            if ((r.seq === '' || r.seq === undefined) && list[i].seq !== undefined && list[i].seq !== '') r.seq = list[i].seq;
             r.updatedAt = now;
             r.archived = list[i].archived === true ? true : r.archived;
             if (!r.confirmedAt && list[i].confirmedAt) r.confirmedAt = list[i].confirmedAt;
@@ -479,6 +488,7 @@
         madeDate: ['成型日期', '制作日期', '成型'],
         age: ['龄期', '龄期(d)', '龄期（d）', '养护龄期'],
         temp: ['温度', '气温', '温度(℃)'],
+        seq: ['序号', '编号', 'No', 'NO', 'no', 'No.'],
         sendDate: ['送检日期', '送检时间', '送检'],
         chip1: ['芯片号1', '芯片1', '芯片号一', '芯片号①'],
         chip2: ['芯片号2', '芯片2', '芯片号二', '芯片号②'],
@@ -545,14 +555,14 @@
       var keys = {};
       base.forEach(function (b) {
         var k = dupKeyOf(normalize(b));
-        if (k.replace(/\|/g, '')) keys[k] = true;
+        if (k.replace(/\|/g, '')) keys[k] = b; /* 存原始记录，跳过时可回写序号 */
       });
       for (var i = headIdx + 1; i < rows.length; i++) {
         var row = rows[i] || [];
         function cell(key) {
           var v = cellRaw(row, key);
           if (key === 'madeDate' || key === 'sendDate') return cleanDate(v);
-          if (key === 'chip1' || key === 'chip2' || key === 'chip3' || key === 'age' || key === 'temp') return cleanNum(v);
+          if (key === 'chip1' || key === 'chip2' || key === 'chip3' || key === 'age' || key === 'temp' || key === 'seq') return cleanNum(v);
           return v;
         }
         if (!cell('examType') && !cell('project')) continue;
@@ -562,11 +572,17 @@
           madeDate: cell('madeDate'), age: cell('age'), temp: cell('temp'),
           sendDate: cell('sendDate'),
           chip1: cell('chip1'), chip2: cell('chip2'), chip3: cell('chip3'),
+          seq: cell('seq'),
           remark: cell('remark'),
           status: (cell('status') === '已核实' || cell('status') === '已确认') ? STATUS.DONE : STATUS.PENDING
         });
         var kk = dupKeyOf(rec);
-        if (kk.replace(/\|/g, '') && keys[kk]) { skipped++; continue; }
+        if (kk.replace(/\|/g, '') && keys[kk]) {
+          /* 七列全一致 → 跳过；若原记录没有序号而本行有序号，补记以便按序号排列 */
+          var ex = keys[kk];
+          if (rec.seq !== '' && String(ex.seq || '') === '') { ex.seq = rec.seq; }
+          skipped++; continue;
+        }
         keys[kk] = true;
         rec.id = uid(); rec.createdAt = Date.now(); rec.updatedAt = Date.now();
         base.push(rec); added++;
