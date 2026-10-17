@@ -1,24 +1,18 @@
-/* 试件送检清单 —— 云端同步层（GitHub Pages + Cloudflare Worker 中转 + 飞书多维表格）
+/* 试件送检清单 —— 云端同步层（GitHub Pages / Cloudflare Pages + GitHub 数据库）
  *
  * 工作方式：
  *   1. 页面始终先读写 localStorage，保证断网/信号差时也能用（工地现场常见）；
- *   2. 每次增删改会进入同步队列，由 Cloudflare Worker 中转写入飞书多维表格；
- *   3. 打开页面时从云端拉一次，按飞书 record_id 对齐本地记录；
- *   4. 接口不通则保持“离线”状态，队列留在本地，联网或下次打开自动补传。
- *
- * 接口地址（可配多条，自动探测能连上的那条）：
- *   1) 页面参数 ?api=https://你的域名 临时覆盖；
- *   2) 长按右下角状态角标（或连点 3 下）→「同步设置」里填写，存在本机、立即生效；
- *   3) SampleCloud.setApi('https://你的域名') 写入本机。
- *   国内网络直连 *.workers.dev 经常被阻断，给 Worker 绑一个自己的域名后填进来即可。
+ *   2. 每次增删改会进入同步队列，由 Cloudflare Pages 的 /api 中转存入 GitHub 仓库 data/db.json；
+ *   3. 打开页面时从云端拉一次全量数据，按云端记录 id 对齐本地记录；
+ *   4. 接口不通则保持“离线”状态，队列留在本地，联网或下次打开自动补传；
+ *      即使浏览器/微信清掉了本地缓存，重新打开也会从云端恢复全部数据。
  */
 (function (global) {
   'use strict';
 
-  /* 候选中转线路：第一个是默认的 workers.dev，后面可以自己加 */
+  /* 候选中转线路：Cloudflare Pages（静态站 + /api 同源 + GitHub 数据库） */
   var DEFAULT_ENDPOINTS = [
-    'https://sample-check.pages.dev',            /* Cloudflare Pages：静态站 + /api 同源，国内可直连 */
-    'https://sample-check-worker.297182.workers.dev' /* 旧线路，国内多被墙，仅兜底 */
+    'https://sample-check.pages.dev'            /* Cloudflare Pages：静态站 + /api 同源，国内可直连 */
   ];
   var CFG_KEY = 'wb_sample_cloud_v1';
   var QKEY = 'wb_sample_queue_v1';
@@ -191,7 +185,8 @@
       status: rec.status === '已核实' ? '已核实' : '待核实',
       archived: rec.archived === true,
       batchAt: rec.batch === true ? (rec.batchAt || Store.today()) : '',
-      remark: rec.remark || ''
+      remark: rec.remark || '',
+      seq: rec.seq === '' || rec.seq === undefined || rec.seq === null ? '' : String(rec.seq)
     };
   }
   function fromWire(w) {
@@ -215,12 +210,14 @@
       archived: w.archived === true,
       batch: w.batch === true || !!String(w.batchAt || '').trim(),
       batchAt: String(w.batchAt || '').trim(),
-      remark: w.remark || ''
+      remark: w.remark || '',
+      seq: (function () { var n = parseInt(w.seq, 10); return isFinite(n) ? n : ''; })()
     };
   }
-  /* 业务唯一键：检测类型 + 工程名称 + 部位 + 送检日期 */
+  /* 业务唯一键：部位 + 等级 + 规格型号 + 成型日期 + 芯片号1/2/3（与导入去重规则一致） */
   function keyOf(r) {
-    return [r.examType || '', r.project || '', r.part || '', r.sendDate || ''].join('|');
+    return [r.part || '', r.grade || '', r.spec || '', r.madeDate || '',
+      r.chip1 || '', r.chip2 || '', r.chip3 || ''].join('|');
   }
 
   /* ---------------- 队列 ---------------- */
@@ -338,13 +335,20 @@
       var byRid = {}, byKey = {};
       remote.forEach(function (r) {
         if (r.rid) byRid[r.rid] = r;
-        byKey[keyOf(r)] = r;
+        var k = keyOf(r);
+        if (k.replace(/\|/g, '')) byKey[k] = r; /* 全空的键不参与匹配 */
       });
+
+      /* 存储迁移：后端从飞书切到 GitHub 后，本地留着旧 rid 的记录要重新上传 */
+      var seenStorage = readJSON('wb_sample_storage', '');
+      var migrating = !!d.storage && seenStorage !== d.storage;
 
       var locals = localList();
       var seen = {};
       var pendingCreates = [];
       var localRid = {}, localKey = {};
+      var pendingRid = {};
+      queue.forEach(function (q) { if (q.rid) pendingRid[q.rid] = true; });
       locals.forEach(function (l) {
         if (l.rid) localRid[l.rid] = true;
         localKey[keyOf(l)] = true;
@@ -352,7 +356,8 @@
       suspend++;
       try {
         locals.forEach(function (l) {
-          var hit = (l.rid && byRid[l.rid]) || byKey[keyOf(l)];
+          var lk = keyOf(l);
+          var hit = (l.rid && byRid[l.rid]) || (lk.replace(/\|/g, '') && byKey[lk]);
           if (hit) {
             seen[hit.rid] = true;
             var merged = fromWire(hit);
@@ -365,6 +370,11 @@
             Store.save(merged);
           } else if (!l.rid) {
             /* 本地新增、云端还没有 —— 稍后补传 */
+            pendingCreates.push(l);
+          } else if (migrating && !pendingRid[l.rid]) {
+            /* 旧存储的 rid 在新云端不存在 → 清掉 rid 重新上传（迁移只发生一次） */
+            Store.setRid(l.id, '');
+            l.rid = '';
             pendingCreates.push(l);
           }
         });
@@ -383,16 +393,16 @@
           }
         });
         /* 云端已删除的（有 rid 但云端没有）→ 本地同步删除，但有待办的不动。
-           注意：只有云端确实返回了数据才做这个判断，避免接口异常返回空表时把本地清空。 */
-        var pendingRid = {};
-        queue.forEach(function (q) { if (q.rid) pendingRid[q.rid] = true; });
-        if (remote.length) {
+           注意：只有云端确实返回了数据才做这个判断，避免接口异常返回空表时把本地清空。
+           存储迁移期间不删（旧 rid 都不在新云端，是要重传而不是删除）。 */
+        if (remote.length && !migrating) {
           locals.forEach(function (l) {
             if (l.rid && !byRid[l.rid] && !pendingRid[l.rid] && !seen[l.rid]) Store.remove(l.id);
           });
         }
       } finally {
         suspend--;
+        if (d.storage) writeJSON('wb_sample_storage', d.storage);
       }
       pendingCreates.forEach(function (l) {
         if (Store.get(l.id)) enqueue({ op: 'create', id: l.id, data: toWire(l) });
@@ -476,7 +486,7 @@
     var b = ensureBadge();
     var n = queue.length;
     var map = {
-      cloud: ['☁ 已连飞书', '#e8f6ee', '#15803d', '#bbe8cd'],
+      cloud: ['☁ 已连云端', '#e8f6ee', '#15803d', '#bbe8cd'],
       syncing: ['☁ 同步中…' + (n ? ' ' + n : ''), '#eaf2fb', '#1d4ed8', '#c7dcf7'],
       offline: [n ? '⚠ 离线 · ' + n + ' 条待传' : '⚠ 离线（已存本地）', '#fdf3e3', '#b45309', '#f2dcb4'],
       local: ['☁ 未连接', '#f1f5f9', '#475569', '#e2e8f0']
@@ -539,7 +549,7 @@
       '<div style="padding:8px 16px 0;display:flex;gap:8px;">',
       '<button data-save style="flex:1;padding:9px 12px;border:0;border-radius:9px;background:#0f172a;color:#fff;font:600 13px/1.4 inherit;cursor:pointer;">保存并测试</button>',
       '</div>',
-      '<div style="padding:8px 16px 0;font-size:12px;color:#94a3b8;">默认线路是 Cloudflare 的 *.workers.dev，国内可能连不上；给 Worker 绑定自定义域名后把域名填在上面即可，改完立刻生效，不用重新发版。</div>',
+      '<div style="padding:8px 16px 0;font-size:12px;color:#94a3b8;">默认线路是 Cloudflare Pages（sample-check.pages.dev），数据保存在 GitHub 仓库；换线路后把新地址填在上面即可，改完立刻生效，不用重新发版。</div>',
       '<div style="margin:14px 16px 0;border-top:1px solid #e2e8f0;"></div>',
       '<div style="padding:10px 16px 0;font-size:12px;color:#64748b;">没有网络时，用文件在手机/电脑之间对传</div>',
       '<div style="padding:8px 16px 16px;display:flex;gap:8px;">',
@@ -569,7 +579,7 @@
     function refresh() {
       var eps = endpoints();
       info.innerHTML =
-        '状态：<b>' + ({ cloud: '已连飞书', syncing: '同步中', offline: '离线', local: '未连接' }[Cloud.state] || '未连接') + '</b><br>' +
+        '状态：<b>' + ({ cloud: '已连云端', syncing: '同步中', offline: '离线', local: '未连接' }[Cloud.state] || '未连接') + '</b><br>' +
         '当前线路：' + (Cloud.api ? Cloud.api : '同源（Worker 站点）') + '<br>' +
         '待传：' + queue.length + ' 条 ｜ 云端：' + (Cloud.remoteCount || 0) + ' 条<br>' +
         '上次拉取：' + fmtTime(Cloud.lastPull) +
@@ -767,7 +777,7 @@
       return syncAfterImport(_impJSON.apply(Store, arguments), before);
     };
 
-    /* 演示数据只留本地，不写进飞书 */
+    /* 演示数据只留本地，不写进云端 */
     var _seed = Store.seed;
     Store.seed = function () {
       var before = {};
@@ -803,8 +813,13 @@
     /* 手机切回前台 / 解锁屏幕时补一次，避免后台挂久了看不到新数据 */
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState !== 'visible') return;
-      if (Date.now() - (Cloud.lastPull || 0) < 15000) return;
+      if (Date.now() - (Cloud.lastPull || 0) < 5000) return;
       resync();
+    });
+    /* 浏览器/微信里退出再进来（含 bfcache 恢复）时重新拉全量数据 */
+    global.addEventListener('pageshow', function (e) {
+      if (e && e.persisted) resync();
+      else if (Date.now() - (Cloud.lastPull || 0) > 5000) resync();
     });
     /* 兜底：25 秒看一次积压队列，90 秒在可见状态下轻拉一次 */
     setInterval(function () { if (queue.length) Cloud.flush(); }, 25000);
