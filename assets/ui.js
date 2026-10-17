@@ -103,17 +103,23 @@
     return rows.filter(function (r) { return r.some(function (c) { return String(c).trim() !== ''; }); });
   }
 
-  /* 读 Excel：优先用 SheetJS（按需从 CDN 加载），失败则提示另存为 CSV */
+  /* 读 Excel：优先用本地打包的 SheetJS（免联网、国内可靠），失败再试 CDN */
   var sheetPromise = null;
   function loadSheetJS() {
     if (global.XLSX) return Promise.resolve(global.XLSX);
     if (sheetPromise) return sheetPromise;
     sheetPromise = new Promise(function (resolve, reject) {
-      var s = document.createElement('script');
-      s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
-      s.onload = function () { global.XLSX ? resolve(global.XLSX) : reject(new Error('加载失败')); };
-      s.onerror = function () { reject(new Error('加载失败')); };
-      document.head.appendChild(s);
+      var tried = 0;
+      var srcs = ['assets/vendor/xlsx.full.min.js', 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'];
+      function next() {
+        if (tried >= srcs.length) { sheetPromise = null; reject(new Error('加载失败')); return; }
+        var s = document.createElement('script');
+        s.src = srcs[tried++];
+        s.onload = function () { global.XLSX ? resolve(global.XLSX) : next(); };
+        s.onerror = next;
+        document.head.appendChild(s);
+      }
+      next();
     });
     return sheetPromise;
   }
@@ -129,15 +135,21 @@
           return aoa.map(function (r) { return r.map(function (c) { return c === null || c === undefined ? '' : String(c); }); });
         });
       }).catch(function () {
-        throw new Error('无法读取 Excel（需要联网加载解析组件）。请把表格另存为 CSV 后再导入。');
+        throw new Error('无法读取 Excel（解析组件加载失败）。请把表格另存为 CSV 后再导入。');
       });
     }
-    return new Promise(function (resolve, reject) {
-      var fr = new FileReader();
-      fr.onload = function () { resolve(parseCSV(String(fr.result))); };
-      fr.onerror = function () { reject(new Error('文件读取失败')); };
-      fr.readAsText(file, 'utf-8');
-    });
+    /* CSV/TXT：读原始字节自动识别编码（UTF-8 优先，失败按 GBK——Excel 另存的中文 CSV 是 GBK） */
+    return file.arrayBuffer().then(function (buf) {
+      var bytes = new Uint8Array(buf);
+      var text;
+      try {
+        text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+      } catch (e) {
+        try { text = new TextDecoder('gbk').decode(bytes); }
+        catch (e2) { text = new TextDecoder('utf-8').decode(bytes); }
+      }
+      return parseCSV(text);
+    }, function () { throw new Error('文件读取失败'); });
   }
 
   function pickFile(accept, cb) {
