@@ -6,13 +6,17 @@
  *   3. 打开页面时从云端拉一次，按飞书 record_id 对齐本地记录；
  *   4. 接口不通则保持“离线”状态，队列留在本地，联网或下次打开自动补传。
  *
- * 接口地址：默认 https://sample-check-worker.297182.workers.dev
- *   可用 ?api=https://你的域名 覆盖，或 SampleCloud.setApi('...') 持久化。
+ * 接口地址（可配多条，自动探测能连上的那条）：
+ *   1) 页面参数 ?api=https://你的域名 临时覆盖；
+ *   2) 长按右下角状态角标（或连点 3 下）→「同步设置」里填写，存在本机、立即生效；
+ *   3) SampleCloud.setApi('https://你的域名') 写入本机。
+ *   国内网络直连 *.workers.dev 经常被阻断，给 Worker 绑一个自己的域名后填进来即可。
  */
 (function (global) {
   'use strict';
 
-  var DEFAULT_API = 'https://sample-check-worker.297182.workers.dev';
+  /* 候选中转线路：第一个是默认的 workers.dev，后面可以自己加 */
+  var DEFAULT_ENDPOINTS = ['https://sample-check-worker.297182.workers.dev'];
   var CFG_KEY = 'wb_sample_cloud_v1';
   var QKEY = 'wb_sample_queue_v1';
 
@@ -24,17 +28,42 @@
     try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; }
   }
 
-  function resolveApi() {
+  function cfg() {
+    var c = readJSON(CFG_KEY, {});
+    return (c && typeof c === 'object') ? c : {};
+  }
+  function saveCfg(patch) {
+    var c = cfg();
+    for (var k in patch) {
+      if (Object.prototype.hasOwnProperty.call(patch, k)) c[k] = patch[k];
+    }
+    writeJSON(CFG_KEY, c);
+  }
+  function norm(u) { return String(u == null ? '' : u).trim().replace(/\/+$/, ''); }
+
+  /* 候选线路优先级：页面参数 > 本机保存的列表 > 默认 */
+  function endpoints() {
     var q = '';
     try { q = new URLSearchParams(location.search).get('api') || ''; } catch (e) {}
-    if (q) {
-      if (q === 'same') return '';
-      if (/^https?:\/\//i.test(q)) return q.replace(/\/+$/, '');
-    }
-    var saved = readJSON(CFG_KEY, {}).api;
-    if (saved) return String(saved).replace(/\/+$/, '');
-    if (/\.workers\.dev$/i.test(location.hostname)) return ''; /* 站点本身就挂在 Worker 上，走同源 */
-    return DEFAULT_API;
+    if (q === 'same') return [''];
+    if (/^https?:\/\//i.test(q)) return [norm(q)];
+    var c = cfg();
+    var list = Array.isArray(c.endpoints)
+      ? c.endpoints.map(norm).filter(function (u) { return !!u; })
+      : [];
+    if (c.api && list.indexOf(norm(c.api)) < 0) list.unshift(norm(c.api));
+    if (!list.length) list = DEFAULT_ENDPOINTS.slice();
+    /* 站点本身挂在 Worker 上时，同源最快 */
+    if (/\.workers\.dev$/i.test(location.hostname) && list.indexOf('') < 0) list.unshift('');
+    return list;
+  }
+
+  /* 初始线路：优先用上次探测成功的那条 */
+  function resolveApi() {
+    var list = endpoints();
+    var chosen = norm(cfg().chosen);
+    if (chosen && list.indexOf(chosen) >= 0) return chosen;
+    return list[0];
   }
 
   var Store = null;
@@ -58,10 +87,15 @@
   function log() {}
 
   /* ---------------- 网络 ---------------- */
-  function post(path, body) {
-    var url = Cloud.api + path;
+  function request(api, path, body, ms) {
+    if (typeof fetch !== 'function') {
+      var e0 = new Error('当前浏览器不支持网络请求（fetch）');
+      e0.code = 'API';
+      return Promise.reject(e0);
+    }
+    var url = api + path;
     var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 9000) : null;
+    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, ms || 9000) : null;
     function done() { if (timer) clearTimeout(timer); }
     return fetch(url, {
       method: 'POST',
@@ -72,15 +106,60 @@
       return res.text().then(function (t) {
         done();
         var d;
-        try { d = JSON.parse(t); } catch (e) { throw new Error('接口返回异常（HTTP ' + res.status + '）'); }
-        if (!d.ok) throw new Error(d.error || ('接口错误 HTTP ' + res.status));
+        try { d = JSON.parse(t); } catch (e) {
+          var e1 = new Error('接口返回异常（HTTP ' + res.status + '）');
+          e1.code = 'API';
+          throw e1;
+        }
+        if (!d.ok) {
+          var e2 = new Error(d.error || ('接口错误 HTTP ' + res.status));
+          e2.code = 'API';
+          throw e2;
+        }
         return d;
       });
     }, function (e) {
       done();
-      throw new Error(e && e.name === 'AbortError' ? '连接中转服务器超时' : '连接中转服务器失败');
+      var err = new Error(e && e.name === 'AbortError' ? '连接中转服务器超时' : '连接中转服务器失败');
+      err.code = 'NET';
+      throw err;
     });
   }
+
+  /* POST + 线路自动切换：
+     只有“连不上/超时”（code=NET）才换下一条线路重试；接口本身报错不重试，避免重复写入。
+     Worker 的 create 按业务键去重，所以换线路重发不会产生重复记录。 */
+  function post(path, body, tried) {
+    tried = tried || [];
+    var ep = Cloud.api;
+    tried.push(ep);
+    return request(ep, path, body, 9000).catch(function (e) {
+      if (!e || e.code !== 'NET') throw e;
+      var rest = endpoints().filter(function (u) { return tried.indexOf(u) < 0; });
+      if (!rest.length) throw e;
+      Cloud.api = rest[0];
+      Cloud.switched = true;
+      saveCfg({ chosen: rest[0] });
+      log('switch endpoint -> ' + (rest[0] || 'same-origin'));
+      return post(path, body, tried);
+    });
+  }
+
+  /* 逐条探测候选线路，返回第一条通的地址，并记为本机首选 */
+  Cloud.probe = function () {
+    var list = endpoints();
+    var i = 0;
+    function next() {
+      if (i >= list.length) return Promise.resolve('');
+      var ep = list[i++];
+      return request(ep, '/api/health', {}, 4000).then(function () {
+        Cloud.api = ep;
+        saveCfg({ chosen: ep, api: ep || undefined });
+        return ep;
+      }, next);
+    }
+    return next();
+  };
 
   /* ---------------- 记录 <-> 云端字段 ---------------- */
   function toWire(rec) {
@@ -322,7 +401,19 @@
   };
 
   /* ---------------- 状态角标 ---------------- */
-  var badge = null, hideTimer = null;
+  var badge = null, hideTimer = null, clickN = 0, clickT = 0, pressTimer = null, longPressed = false;
+
+  function doSync() {
+    /* 先拉一次（拿别人在电脑/手机上改的），再把本地积压推上去 */
+    var task = Cloud.state === 'offline'
+      ? Cloud.probe().then(function (ep) {
+          if (!ep && ep !== '') return false;
+          return Cloud.pull();
+        })
+      : Cloud.pull();
+    return task.then(function () { Cloud.flush(); });
+  }
+
   function ensureBadge() {
     if (badge) return badge;
     badge = document.createElement('div');
@@ -334,25 +425,47 @@
       'box-shadow:0 6px 20px -8px rgba(15,27,45,.45)', 'transition:opacity .25s',
       'user-select:none', 'background:#f1f5f9', 'color:#475569', 'border:1px solid #e2e8f0',
       'opacity:0', 'pointer-events:none',
-      'max-width:calc(100vw - 28px)'
+      'max-width:calc(100vw - 28px)', '-webkit-tap-highlight-color:transparent'
     ].join(';');
     if (window.innerWidth < 760) badge.style.bottom = '78px';
-    badge.title = '点击立即与飞书多维表格同步';
+    badge.title = '点击立即同步 · 长按（或连点 3 下）打开同步设置';
     badge.onclick = function () {
-      if (Cloud.state === 'offline') { Cloud.pull().then(function () { Cloud.flush(); }); }
-      else { Cloud.flush(); }
+      if (longPressed) { longPressed = false; return; }
+      var now = Date.now();
+      clickN = (now - clickT < 1200) ? clickN + 1 : 1;
+      clickT = now;
+      if (clickN >= 3) { clickN = 0; Cloud.openPanel(); return; }
+      doSync();
       showBadge(true);
     };
+    function pressStart() {
+      longPressed = false;
+      if (pressTimer) clearTimeout(pressTimer);
+      pressTimer = setTimeout(function () {
+        pressTimer = null;
+        longPressed = true;
+        clickN = 0;
+        Cloud.openPanel();
+      }, 700);
+    }
+    function pressEnd() {
+      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+    }
+    badge.addEventListener('pointerdown', pressStart);
+    badge.addEventListener('pointerup', pressEnd);
+    badge.addEventListener('pointercancel', pressEnd);
+    badge.addEventListener('pointerleave', pressEnd);
     document.body.appendChild(badge);
     return badge;
   }
 
   function paint() {
     var b = ensureBadge();
+    var n = queue.length;
     var map = {
       cloud: ['☁ 已连飞书', '#e8f6ee', '#15803d', '#bbe8cd'],
-      syncing: ['☁ 同步中…', '#eaf2fb', '#1d4ed8', '#c7dcf7'],
-      offline: ['⚠ 离线（已存本地）', '#fdf3e3', '#b45309', '#f2dcb4'],
+      syncing: ['☁ 同步中…' + (n ? ' ' + n : ''), '#eaf2fb', '#1d4ed8', '#c7dcf7'],
+      offline: [n ? '⚠ 离线 · ' + n + ' 条待传' : '⚠ 离线（已存本地）', '#fdf3e3', '#b45309', '#f2dcb4'],
       local: ['☁ 未连接', '#f1f5f9', '#475569', '#e2e8f0']
     };
     var m = map[Cloud.state] || map.local;
@@ -361,8 +474,8 @@
     b.style.color = m[2];
     b.style.borderColor = m[3];
     b.title = Cloud.state === 'offline'
-      ? ('云端未连接：' + (Cloud.error || '网络异常') + '（数据已存在本机，联网后自动补传）')
-      : '点击立即与飞书多维表格同步';
+      ? ('云端未连接：' + (Cloud.error || '网络异常') + '（数据已存在本机，联网后自动补传）\n长按可打开同步设置，换一条中转线路')
+      : '点击立即同步 · 长按（或连点 3 下）打开同步设置';
     b.style.display = 'block';
     showBadge(false);
   }
@@ -380,6 +493,152 @@
       b.style.pointerEvents = 'none';
     }, wait);
   }
+
+  /* ---------------- 同步设置面板（长按角标 / 连点 3 下） ---------------- */
+  var panelEl = null;
+
+  function fmtTime(t) {
+    if (!t) return '—';
+    var d = new Date(t);
+    function p(n) { return (n < 10 ? '0' : '') + n; }
+    return p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+  }
+
+  function buildPanel() {
+    if (panelEl) return panelEl;
+    var wrap = document.createElement('div');
+    wrap.id = 'cloudPanelMask';
+    wrap.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;z-index:10000;background:rgba(15,23,42,.42);display:none;align-items:center;justify-content:center;padding:16px;';
+    wrap.innerHTML = [
+      '<div style="width:100%;max-width:430px;max-height:calc(100vh - 32px);overflow:auto;background:#ffffff;color:#0f172a;border-radius:16px;',
+      'box-shadow:0 24px 60px -20px rgba(15,23,42,.55);font:14px/1.65 -apple-system,BlinkMacSystemFont,\'Segoe UI\',\'PingFang SC\',\'Microsoft YaHei\',sans-serif;">',
+      '<div style="display:flex;align-items:center;justify-content:space-between;padding:15px 16px 6px;">',
+      '<b style="font-size:16px;">云同步设置</b>',
+      '<span data-close style="cursor:pointer;color:#64748b;font-size:22px;line-height:1;padding:0 6px;">×</span>',
+      '</div>',
+      '<div data-info style="padding:4px 16px 10px;font-size:13px;color:#475569;"></div>',
+      '<div style="padding:0 16px;display:flex;gap:8px;flex-wrap:wrap;">',
+      '<button data-sync style="flex:1 1 120px;padding:9px 12px;border:0;border-radius:9px;background:#1d4ed8;color:#fff;font:600 13px/1.4 inherit;cursor:pointer;">立即同步</button>',
+      '<button data-probe style="flex:1 1 120px;padding:9px 12px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;color:#0f172a;font:600 13px/1.4 inherit;cursor:pointer;">探测线路</button>',
+      '</div>',
+      '<div style="padding:14px 16px 0;font-size:12px;color:#64748b;">中转地址（每行一条，按顺序自动探测；国内建议填自己的域名）</div>',
+      '<div style="padding:6px 16px 0;"><textarea data-eps spellcheck="false" placeholder="https://api.你的域名.com" style="width:100%;min-height:74px;box-sizing:border-box;padding:9px 10px;border:1px solid #cbd5e1;border-radius:9px;font:13px/1.5 ui-monospace,Menlo,Consolas,monospace;color:#0f172a;background:#f8fafc;resize:vertical;"></textarea></div>',
+      '<div style="padding:8px 16px 0;display:flex;gap:8px;">',
+      '<button data-save style="flex:1;padding:9px 12px;border:0;border-radius:9px;background:#0f172a;color:#fff;font:600 13px/1.4 inherit;cursor:pointer;">保存并测试</button>',
+      '</div>',
+      '<div style="padding:8px 16px 0;font-size:12px;color:#94a3b8;">默认线路是 Cloudflare 的 *.workers.dev，国内可能连不上；给 Worker 绑定自定义域名后把域名填在上面即可，改完立刻生效，不用重新发版。</div>',
+      '<div style="margin:14px 16px 0;border-top:1px solid #e2e8f0;"></div>',
+      '<div style="padding:10px 16px 0;font-size:12px;color:#64748b;">没有网络时，用文件在手机/电脑之间对传</div>',
+      '<div style="padding:8px 16px 16px;display:flex;gap:8px;">',
+      '<button data-export style="flex:1;padding:9px 12px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;color:#0f172a;font:600 13px/1.4 inherit;cursor:pointer;">导出 JSON</button>',
+      '<button data-import style="flex:1;padding:9px 12px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;color:#0f172a;font:600 13px/1.4 inherit;cursor:pointer;">导入 JSON</button>',
+      '</div>',
+      '</div>'
+    ].join('');
+    document.body.appendChild(wrap);
+    panelEl = wrap;
+
+    var card = wrap.firstChild;
+    var info = card.querySelector('[data-info]');
+    var epsBox = card.querySelector('[data-eps]');
+    var msg = null;
+
+    function note(text, ok) {
+      if (!msg) {
+        msg = document.createElement('div');
+        msg.style.cssText = 'padding:8px 16px 0;font-size:12px;';
+        card.insertBefore(msg, card.querySelector('[data-save]').parentNode.nextSibling);
+      }
+      msg.textContent = text;
+      msg.style.color = ok === false ? '#b45309' : '#15803d';
+    }
+
+    function refresh() {
+      var eps = endpoints();
+      info.innerHTML =
+        '状态：<b>' + ({ cloud: '已连飞书', syncing: '同步中', offline: '离线', local: '未连接' }[Cloud.state] || '未连接') + '</b><br>' +
+        '当前线路：' + (Cloud.api ? Cloud.api : '同源（Worker 站点）') + '<br>' +
+        '待传：' + queue.length + ' 条 ｜ 云端：' + (Cloud.remoteCount || 0) + ' 条<br>' +
+        '上次拉取：' + fmtTime(Cloud.lastPull) +
+        (Cloud.error ? '<br><span style="color:#b45309;">错误：' + Cloud.error + '</span>' : '');
+      if (document.activeElement !== epsBox) epsBox.value = eps.join('\n');
+    }
+
+    wrap.addEventListener('click', function (e) {
+      if (e.target === wrap || e.target.getAttribute('data-close') !== null) closePanel();
+    });
+    card.querySelector('[data-sync]').onclick = function () {
+      note('正在同步…');
+      doSync().then(function () { refresh(); note('同步完成'); });
+    };
+    card.querySelector('[data-probe]').onclick = function () {
+      note('正在探测…');
+      Cloud.probe().then(function (ep) {
+        refresh();
+        note(ep || ep === '' ? '已选用：' + (ep || '同源') : '所有线路都不通，请检查网络或更换地址', !!ep || ep === '');
+      });
+    };
+    card.querySelector('[data-save]').onclick = function () {
+      var list = epsBox.value.split(/[\n,，\s]+/).map(norm).filter(Boolean);
+      if (!list.length) { note('请至少填一条中转地址', false); return; }
+      Cloud.setEndpoints(list);
+      note('已保存，正在测试…');
+      Cloud.probe().then(function (ep) {
+        refresh();
+        if (!ep && ep !== '') { note('地址已保存，但暂时连不上：' + Cloud.error, false); return; }
+        note('连接成功：' + (ep || '同源'));
+        return Cloud.pull().then(function () { Cloud.flush(); refresh(); });
+      });
+    };
+    card.querySelector('[data-export]').onclick = function () {
+      try {
+        var text = Store.exportJSON();
+        var blob = new Blob([text], { type: 'application/json' });
+        var a = document.createElement('a');
+        var d = new Date();
+        function p(n) { return (n < 10 ? '0' : '') + n; }
+        a.href = URL.createObjectURL(blob);
+        a.download = '试件送检清单-' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '.json';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+        note('已导出，可用微信/QQ 发到另一台设备再导入');
+      } catch (e) { note('导出失败：' + e.message, false); }
+    };
+    card.querySelector('[data-import]').onclick = function () {
+      var input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json,application/json';
+      input.onchange = function () {
+        var f = input.files && input.files[0];
+        if (!f) return;
+        var reader = new FileReader();
+        reader.onload = function () {
+          var ret = Store.importJSON(String(reader.result || ''));
+          note(ret.msg, ret.ok);
+          refresh();
+          if (ret.ok) Cloud.flush();
+        };
+        reader.readAsText(f, 'utf-8');
+      };
+      input.click();
+    };
+    wrap._refresh = refresh;
+    return wrap;
+  }
+
+  function closePanel() {
+    if (panelEl) panelEl.style.display = 'none';
+    showBadge(false);
+  }
+
+  Cloud.openPanel = function () {
+    var el = buildPanel();
+    el._refresh();
+    el.style.display = 'flex';
+    if (hideTimer) clearTimeout(hideTimer);
+  };
+  Cloud.closePanel = closePanel;
 
   function notify() {
     if (typeof Cloud.onUpdate === 'function') {
@@ -483,19 +742,49 @@
     if (typeof o.onUpdate === 'function') Cloud.onUpdate = o.onUpdate;
     install(global.SampleStore);
     paint();
-    var p = Cloud.pull();
-    if (queue.length) Cloud.flush();
-    global.addEventListener('online', function () { Cloud.pull().then(function () { Cloud.flush(); }); });
+
+    /* 首屏：能通就拉；不通就逐条探测候选线路，哪条通用哪条 */
+    var p = Cloud.pull().then(function (ok) {
+      if (ok) return true;
+      return Cloud.probe().then(function (ep) {
+        if (!ep && ep !== '') return false;
+        return Cloud.pull();
+      });
+    });
+
+    if (queue.length) p.then(function () { Cloud.flush(); });
+
+    function resync() {
+      Cloud.pull().then(function () { Cloud.flush(); });
+    }
+    global.addEventListener('online', resync);
+    /* 手机切回前台 / 解锁屏幕时补一次，避免后台挂久了看不到新数据 */
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState !== 'visible') return;
+      if (Date.now() - (Cloud.lastPull || 0) < 15000) return;
+      resync();
+    });
+    /* 兜底：25 秒看一次积压队列，90 秒在可见状态下轻拉一次 */
     setInterval(function () { if (queue.length) Cloud.flush(); }, 25000);
+    setInterval(function () {
+      if (document.visibilityState !== 'visible') return;
+      if (queue.length || Cloud.state === 'syncing') return;
+      Cloud.pull();
+    }, 90000);
     return p;
   };
 
+  /* 覆盖候选线路（页面内设置用） */
+  Cloud.setEndpoints = function (list) {
+    var arr = (Array.isArray(list) ? list : [list]).map(norm).filter(Boolean);
+    if (!arr.length) return endpoints();
+    saveCfg({ endpoints: arr, api: arr[0], chosen: undefined });
+    Cloud.api = arr[0];
+    return arr;
+  };
+
   Cloud.setApi = function (url) {
-    var cfg = readJSON(CFG_KEY, {});
-    cfg.api = String(url || '').replace(/\/+$/, '');
-    writeJSON(CFG_KEY, cfg);
-    Cloud.api = resolveApi();
-    return Cloud.api;
+    return Cloud.setEndpoints([url])[0] || '';
   };
   Cloud.queued = function () { return queue.length; };
   Cloud.wire = toWire;
