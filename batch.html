@@ -79,6 +79,8 @@
       <div class="sub">从清单挑选 · 扫码核验 · 实时同步飞书</div>
     </div>
     <div class="b-hero-act">
+      <a class="btn btn-sm" href="desktop.html" id="heroList">📋 试件送检清单</a>
+      <a class="btn btn-sm" href="archive.html" id="heroArc">🗂 归档库</a>
       <button class="btn btn-sm btn-pri" type="button" id="btnPick">＋ 从清单挑选</button>
       <button class="btn btn-sm" type="button" id="btnScan">📷 扫码核验</button>
     </div>
@@ -101,9 +103,11 @@
       </div>
       <input class="inp inp-sm grow" id="q" placeholder="搜索芯片号 / 工程 / 部位">
       <div class="right">
+        <button class="btn btn-sm" type="button" id="btnArcSel">🗄 归档选中</button>
         <button class="btn btn-sm" type="button" id="btnRemoveSel">移出选中</button>
         <button class="btn btn-sm btn-danger" type="button" id="btnClear">清空本批</button>
         <a class="btn btn-sm" href="desktop.html" id="linkList">返回清单</a>
+        <a class="btn btn-sm" href="archive.html" id="linkArc">归档库</a>
       </div>
     </div>
     <div id="list"></div>
@@ -124,7 +128,7 @@
     </div>
     <div class="modal-b">
       <div class="pick-bar">
-        <input class="inp inp-sm" id="pickQ" placeholder="搜索芯片号 / 工程 / 部位" style="flex:1;min-width:140px">
+        '<input class="inp inp-sm" id="pickQ" placeholder="搜索工程 / 部位 / 检测类型" style="flex:1;min-width:140px">
         <button class="btn btn-sm" type="button" id="btnPickAll">全选当前列表</button>
         <span class="n" id="pickN">已选 0 条</span>
       </div>
@@ -186,7 +190,10 @@
   var state = { status: '', q: '' };
   var selected = {}, picked = {};
 
-  if (window.innerWidth < 760) el('linkList').setAttribute('href', 'mobile.html');
+  if (window.innerWidth < 760) {
+    el('linkList').setAttribute('href', 'mobile.html');
+    el('heroList').setAttribute('href', 'mobile.html');
+  }
 
   function badge(r) {
     return r.status === '已核实' ? '<span class="badge ok">已核实</span>' : '<span class="badge warn">未核实</span>';
@@ -238,10 +245,10 @@
             (meta.length ? ' · ' + meta.join(' · ') : '') + '</div>' +
         '</div>' +
         '<div class="acts">' +
+          '<button class="btn btn-sm" type="button" data-act="remove" title="移出本次送检">移出</button>' +
           (r.status === '已核实'
             ? '<span class="badge ok">✓</span>'
             : '<button class="btn btn-sm btn-pri" type="button" data-act="confirm">核验</button>') +
-          '<button class="btn btn-sm" type="button" data-act="remove" title="移出本次送检">移出</button>' +
         '</div>' +
       '</div>';
     }).join('');
@@ -282,6 +289,9 @@
     el('btnRemoveSel').textContent = n ? '移出选中(' + n + ')' : '移出选中';
     el('btnRemoveSel').disabled = !n;
     el('btnRemoveSel').style.opacity = n ? 1 : .5;
+    el('btnArcSel').textContent = n ? '归档选中(' + n + ')' : '归档选中';
+    el('btnArcSel').disabled = !n;
+    el('btnArcSel').style.opacity = n ? 1 : .5;
   }
 
   /* ---------------- 从清单挑选 ---------------- */
@@ -313,9 +323,11 @@
         '<div class="l"><div class="t1">' + U.esc(r.examType || '—') +
           (r.grade ? ' <span class="grade" style="font-size:10.5px;color:var(--pri);background:var(--pri-l);padding:1px 6px;border-radius:5px">' + U.esc(r.grade) + '</span>' : '') +
           tag(r) + '</div>' +
-          '<div class="t2">' + U.esc(r.project || '—') + (r.part ? ' · ' + U.esc(r.part) : '') +
-            ' · 送检 ' + U.esc(r.sendDate || '—') + '</div>' +
-          '<div class="t2">' + [r.chip1, r.chip2, r.chip3].filter(Boolean).map(U.esc).join(' / ') + '</div>' +
+          '<div class="t2">' + U.esc(r.project || '—') + (r.part ? ' · ' + U.esc(r.part) : '') + '</div>' +
+          '<div class="t2">成型 ' + U.esc(r.madeDate || '—') +
+            ' · 龄期 ' + (r.age !== '' && r.age !== undefined ? U.esc(r.age) + 'd' : '—') +
+            ' · 送检 ' + U.esc(r.sendDate || '—') +
+            (r.cure ? ' · ' + U.esc(r.cure) : '') + '</div>' +
         '</div></label>';
     }).join('');
     $$('#pickList input.chk').forEach(function (cb) {
@@ -419,6 +431,16 @@
   /* ---------------- 事件 ---------------- */
   el('btnPick').onclick = openPick;
   el('btnScan').onclick = openScan;
+  el('btnArcSel').onclick = function () {
+    var ids = Object.keys(selected).filter(function (k) { return selected[k]; });
+    if (!ids.length) return;
+    if (!confirm('把选中的 ' + ids.length + ' 条归档？\n\n归档后移入归档库（不再占用芯片号），可在归档库撤回。')) return;
+    Store.removeFromBatch(ids);
+    var n = Store.archive(ids);
+    selected = {};
+    U.toast(n ? '已归档 ' + n + ' 条' : '这些记录已在归档库', 'ok');
+    render();
+  };
   el('btnRemoveSel').onclick = function () {
     var ids = Object.keys(selected).filter(function (k) { return selected[k]; });
     if (!ids.length) return;
