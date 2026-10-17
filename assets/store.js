@@ -465,7 +465,8 @@
       return { ok: true, added: added, skipped: skipped, msg: '导入完成：新增 ' + added + ' 条' + (skipped ? '，跳过重复 ' + skipped + ' 条' : '') };
     },
 
-    /* rows: 二维数组。兼容三种情况：首行即表头；导出文件带大标题行（真表头在 2~10 行内）；日期/数字为 Excel 序列号 */
+    /* rows: 二维数组。兼容三种情况：首行即表头；导出文件带大标题行（真表头在 2~10 行内）；日期/数字为 Excel 序列号
+       去重规则：部位 + 等级 + 规格型号 + 成型日期 + 芯片号1/2/3 全部一致才视为重复（跳过不导入），否则作为新记录加入 */
     importRows: function (rows) {
       if (!rows || rows.length < 2) return { ok: false, msg: '表格里没有数据行' };
       var map = {
@@ -535,9 +536,17 @@
         return /\d\.0+$/.test(s) ? s.replace(/\.0+$/, '') : s; /* CH-0001.0 → CH-0001 */
       }
 
-      var base = read(), added = 0, updated = 0;
+      /* 重复判定键：部位 + 等级 + 规格型号 + 成型日期 + 芯片号1/2/3（全部一致才算重复） */
+      function dupKeyOf(r) {
+        return [r.part || '', r.grade || '', r.spec || '', r.madeDate || '',
+          r.chip1 || '', r.chip2 || '', r.chip3 || ''].join('|');
+      }
+      var base = read(), added = 0, skipped = 0;
       var keys = {};
-      base.forEach(function (b) { keys[keyOf(normalize(b))] = b; });
+      base.forEach(function (b) {
+        var k = dupKeyOf(normalize(b));
+        if (k.replace(/\|/g, '')) keys[k] = true;
+      });
       for (var i = headIdx + 1; i < rows.length; i++) {
         var row = rows[i] || [];
         function cell(key) {
@@ -556,28 +565,18 @@
           remark: cell('remark'),
           status: (cell('status') === '已核实' || cell('status') === '已确认') ? STATUS.DONE : STATUS.PENDING
         });
-        var kk = keyOf(rec);
-        if (keys[kk]) {
-          /* 重复记录不再跳过：用 Excel 里的非空字段更新已有记录 */
-          var ex = keys[kk], touched = false;
-          ['examType', 'project', 'part', 'grade', 'spec', 'cure', 'madeDate', 'age', 'temp',
-            'sendDate', 'chip1', 'chip2', 'chip3', 'remark'].forEach(function (f) {
-            if (rec[f] !== '' && rec[f] !== undefined && ex[f] !== rec[f]) { ex[f] = rec[f]; touched = true; }
-          });
-          if (idx.status >= 0 && cell('status') && ex.status !== rec.status) { ex.status = rec.status; touched = true; }
-          if (touched) { ex.updatedAt = Date.now(); updated++; }
-          continue;
-        }
-        keys[kk] = rec;
+        var kk = dupKeyOf(rec);
+        if (kk.replace(/\|/g, '') && keys[kk]) { skipped++; continue; }
+        keys[kk] = true;
         rec.id = uid(); rec.createdAt = Date.now(); rec.updatedAt = Date.now();
         base.push(rec); added++;
       }
       if (!write(base)) return { ok: false, msg: '写入失败' };
       var parts = [];
       if (added) parts.push('新增 ' + added + ' 条');
-      if (updated) parts.push('更新重复 ' + updated + ' 条');
+      if (skipped) parts.push('跳过重复 ' + skipped + ' 条');
       if (!parts.length) parts.push('没有需要导入的内容');
-      return { ok: true, added: added, updated: updated, skipped: 0, msg: '导入完成：' + parts.join('，') };
+      return { ok: true, added: added, updated: 0, skipped: skipped, msg: '导入完成：' + parts.join('，') };
     },
 
     clear: function () { return write([]); },
