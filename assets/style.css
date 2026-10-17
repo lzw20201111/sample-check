@@ -178,6 +178,7 @@ table.tbl-wide tbody tr.sel { background: #f1f8ff; }
 @keyframes hitPulse {
   0% { box-shadow: inset 0 0 0 2px #f0b429, 0 0 0 0 rgba(240, 180, 41, .55); }
   100% { box-shadow: inset 0 0 0 2px #f0b429, 0 0 0 9px rgba(240, 180, 41, 0); }
+}
 
 /* 芯片号重复标红（芯片号1/2/3 出现相同号码时），其它列不标注重复 */
 .chip-dup, .m-chip.chip-dup {
@@ -189,8 +190,11 @@ table.tbl-wide tbody tr.sel { background: #f1f8ff; }
   background: #b91c1c; color: #fff; font-size: 10px; font-weight: 700;
   font-style: normal; vertical-align: 1px; line-height: 15px; letter-spacing: 1px;
 }
-}
 tr.row-hit > td { background: #fffbe8 !important; }
+/* 同条件养护整行提示色（淡橙背景，勾选蓝色优先） */
+table.grid tbody tr.row-cure > td, table.tbl-wide tbody tr.row-cure > td { background: #fff3e0; }
+table.grid tbody tr.sel > td, table.tbl-wide tbody tr.sel > td { background: #f1f8ff; }
+.m-rec.cure-warn { background: #fff3e0; box-shadow: inset 3px 0 0 #ffb84d; }
 .inp.ro { background: #f6f9fc; color: var(--ink-2); }
 .chk { width: 15px; height: 15px; accent-color: var(--pri); cursor: pointer; }
 
