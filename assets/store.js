@@ -206,10 +206,11 @@
     deriveSendDate: deriveSendDate,
     keyOf: keyOf,
 
-    /* 主清单（未归档） */
+    /* 主清单（未归档；hideBatch=true 时隐藏已加入本次送检的记录） */
     all: function (opts) {
       var o = opts || {};
       var list = read().filter(function (r) { return o.archived ? r.archived === true : !r.archived; });
+      if (o.hideBatch) list = list.filter(function (r) { return r.batch !== true; });
       if (o.status) list = list.filter(function (r) { return (r.status === '已确认' ? STATUS.DONE : r.status) === o.status; });
       if (o.todayOnly) list = list.filter(function (r) { return r.sendDate === today() || String(r.confirmedAt).slice(0, 10) === today(); });
       if (o.q) {
@@ -223,7 +224,16 @@
       return sortNewest(list.map(normalize));
     },
 
-    archivedAll: function () { return Store.all({ archived: true }); },
+    /* 归档库：送检日期最新的在最前面（同日期按归档时间新的在前） */
+    archivedAll: function () {
+      return Store.all({ archived: true }).slice().sort(function (a, b) {
+        var x = a.sendDate || '', y = b.sendDate || '';
+        if (x !== y) return x < y ? 1 : -1;
+        var xa = String(a.archivedAt || ''), ya = String(b.archivedAt || '');
+        if (xa !== ya) return xa < ya ? 1 : -1;
+        return 0;
+      });
+    },
 
     get: function (id) {
       var list = read();
@@ -440,7 +450,8 @@
     },
 
     stats: function () {
-      var live = read().filter(function (r) { return !r.archived; }).map(normalize);
+      /* 清单统计不含已加入本次送检的记录（它们已在本次送检页单独统计） */
+      var live = read().filter(function (r) { return !r.archived && r.batch !== true; }).map(normalize);
       var t = today();
       var todayTotal = live.filter(function (r) { return r.sendDate === t; }).length;
       var done = live.filter(function (r) { return r.status === STATUS.DONE; }).length;
