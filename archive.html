@@ -196,9 +196,11 @@
     var r = Store.get(id);
     if (!r) return;
     var t = [r.examType, r.grade, r.part].filter(Boolean).join(' · ') || r.project || '该记录';
-    if (!confirm('彻底删除该归档记录？\n\n' + t + '\n删除后不可恢复。')) return;
-    Store.remove(id); delete selected[id];
-    U.toast('已删除', 'ok'); render();
+    U.confirmDelete({ message: '彻底删除该归档记录？\n' + t,
+      onOk: function () {
+        Store.remove(id); delete selected[id];
+        U.toast('已删除', 'ok'); render();
+      } });
   }
 
   el('chkAll').addEventListener('change', function (e) {
