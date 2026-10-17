@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>试件归档库｜自适应</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   * {
     box-sizing: border-box;
@@ -91,7 +92,8 @@
     <h2>📁 试件归档库</h2>
     <div>
       <button class="btn btn-success" onclick="rollbackSelected()">撤回选中至主清单</button>
-      <button class="btn btn-primary" onclick="exportArchiveCSV()">导出归档CSV</button>
+      <button class="btn btn-primary" onclick="exportArchiveExcel()">导出Excel</button>
+      <button class="btn" onclick="exportArchiveCSV()">导出CSV</button>
       <button class="btn" onclick="window.close()">关闭页面</button>
     </div>
   </div>
@@ -189,6 +191,28 @@
     a.href = URL.createObjectURL(blob);
     a.download = "试件归档清单.csv";
     a.click();
+  }
+
+  // 归档库导出Excel(.xlsx)
+  function exportArchiveExcel(){
+    if(archiveList.length===0){alert("归档库无数据");return;}
+    const rows = archiveList.map((item,i)=>({
+      "序号": i+1,
+      "试件编号": item.code||"",
+      "工程名称": item.project||"",
+      "规格型号": item.spec||"",
+      "养护类型": item.cureType||"",
+      "成型日期": item.formDate||"",
+      "送检日期": item.sendDate||"",
+      "芯片号1": item.chip1||"",
+      "芯片号2": item.chip2||"",
+      "芯片号3": item.chip3||"",
+      "核验状态": item.checked?"已确认":"待核验"
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "归档清单");
+    XLSX.writeFile(wb, "试件归档清单.xlsx");
   }
   renderArchive();
 </script>
