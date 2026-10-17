@@ -217,7 +217,7 @@
       var meta = [];
       if (r.age !== '') meta.push('龄期 ' + U.esc(r.age) + 'd');
       if (r.temp !== '') meta.push(U.esc(r.temp) + '℃');
-      return '<div class="m-rec" data-id="' + r.id + '">' +
+      return '<div class="m-rec' + (r.cure === '同条件养护' ? ' cure-warn' : '') + '" data-id="' + r.id + '">' +
         '<input class="chk rowChk" type="checkbox" ' + (isSel ? 'checked' : '') + ' style="margin-top:3px">' +
         '<div class="l" data-act="edit">' +
           '<div class="t1">' + U.esc(r.examType || '未填检测类型') +
