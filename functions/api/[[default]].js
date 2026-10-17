@@ -36,9 +36,10 @@ const FIELD_MAP = {
   chip2: '芯片号2',
   chip3: '芯片号3',
   hitChip: '核实芯片号',
+  batchAt: '本次送检',
   remark: '备注'
 };
-const DATE_KEYS = ['madeDate', 'sendDate'];
+const DATE_KEYS = ['madeDate', 'sendDate', 'batchAt'];
 const NUMBER_KEYS = ['age', 'temp'];
 
 const CORS = {
@@ -162,6 +163,13 @@ function toFields(body) {
     }
   }
 
+  /* 「本次送检」允许清空：显式传空值时要写 null，否则飞书会保留旧日期 */
+  if (body.batchAt !== undefined || body['本次送检'] !== undefined) {
+    const v = get('batchAt');
+    const s = String(v === null || v === undefined ? '' : v).trim();
+    fields['本次送检'] = s ? dateToTs(s) : null;
+  }
+
   const status = get('status');
   if (status !== undefined && status !== null && status !== '') {
     if (typeof status === 'boolean') fields['核验状态'] = status;
@@ -201,6 +209,7 @@ function toRecord(item) {
     chip2: textOf(f['芯片号2']),
     chip3: textOf(f['芯片号3']),
     hitChip: textOf(f['核实芯片号']),
+    batchAt: tsToDate(f['本次送检']),
     status: f['核验状态'] === true ? '已核实' : '待核实',
     archived: f['归档'] === true,
     remark: textOf(f['备注'])
