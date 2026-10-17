@@ -283,10 +283,13 @@
       var isSel = !!selected[r.id];
       var badge = r.status === '已核实' ? '<span class="badge ok">已核实</span>' : '<span class="badge warn">待核实</span>';
       var hit = Store.normCode(r.hitChip);
+      var dups = Store.dupChips ? Store.dupChips() : {};
       function chipCell(val) {
         if (!val) return '<td class="chip muted">—</td>';
         var on = hit && Store.normCode(val) === hit;
-        return '<td class="chip"><span class="' + (on ? 'chip-hit' : '') + '">' + U.esc(val) + '</span></td>';
+        var dup = dups[Store.normCode(val)] > 1;
+        return '<td class="chip"><span class="' + (on ? 'chip-hit ' : '') + (dup ? 'chip-dup' : '') + '">' + U.esc(val) +
+          (dup ? '<i class="dup-tag">重复</i>' : '') + '</span></td>';
       }
       return '<tr data-id="' + r.id + '" class="' + (isSel ? 'sel' : '') + (r.id === flashId ? ' row-hit' : '') + '">' +
         '<td><input class="chk rowChk" type="checkbox" ' + (isSel ? 'checked' : '') + '></td>' +
@@ -375,9 +378,11 @@
   function delRow(id) {
     var r = Store.get(id);
     if (!r) return;
-    if (!confirm('确定删除这条记录？\n\n' + desc(r) + '\n' + (r.project || ''))) return;
-    Store.remove(id); delete selected[id];
-    U.toast('已删除', 'ok'); render();
+    U.confirmDelete({ message: '确定删除这条记录？\n' + desc(r) + '\n' + (r.project || ''),
+      onOk: function () {
+        Store.remove(id); delete selected[id];
+        U.toast('已删除', 'ok'); render();
+      } });
   }
 
   /* ---------- 表单 ---------- */
@@ -674,9 +679,11 @@
   el('btnDelSel').onclick = function () {
     var ids = Object.keys(selected).filter(function (k) { return selected[k]; });
     if (!ids.length) { U.toast('请先勾选记录', 'err'); return; }
-    if (!confirm('删除选中的 ' + ids.length + ' 条记录？删除后不可恢复。')) return;
-    Store.removeMany(ids); selected = {};
-    U.toast('已删除 ' + ids.length + ' 条', 'ok'); render();
+    U.confirmDelete({ message: '删除选中的 ' + ids.length + ' 条记录？',
+      onOk: function () {
+        Store.removeMany(ids); selected = {};
+        U.toast('已删除 ' + ids.length + ' 条', 'ok'); render();
+      } });
   };
   el('btnClearSel').onclick = function () { selected = {}; render(); };
   el('chkAll').addEventListener('change', function (e) {
