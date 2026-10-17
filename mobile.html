@@ -194,7 +194,7 @@
   el('heroSub').textContent = U.nowText().slice(0, 10) + ' · 现场送检';
 
   function render() {
-    var list = Store.all(state);
+    var list = Store.all(Object.assign({ hideBatch: true }, state));
     var st = Store.stats();
     el('mTotal').textContent = st.total;
     el('mDone').textContent = st.done;
