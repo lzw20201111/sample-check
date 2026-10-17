@@ -33,6 +33,9 @@ Cloudflare Worker 中转（sample-check-worker）
 
 非 `/api/` 的请求由 Worker 反向代理本仓库的静态文件，因此 Worker 域名也能直接打开站点。
 
+另有腾讯云 EdgeOne Pages 版本（国内节点，推荐国内使用）：`functions/api/[[default]].js`，
+接口与 Worker 完全一致，数据同样写飞书。部署步骤见 [EDGEONE-部署.md](EDGEONE-部署.md)。
+
 ## 数据字段
 
 | 列 | 说明 |
