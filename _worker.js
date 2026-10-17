@@ -31,9 +31,18 @@ const NUMBER_KEYS = ['age', 'temp'];
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type,X-Access-Key',
   'Access-Control-Max-Age': '86400'
 };
+
+/* 访问口令：与 assets/auth.js 中的密码哈希一致；可用环境变量 ACCESS_KEY 覆盖 */
+const ACCESS_HASH = 'b8e3aa1e3b88222a390dac9232056d0c1f04b34e07fabc861523dd905fd89e8f';
+
+function keyOk(env, request) {
+  const expect = String((env && env.ACCESS_KEY) || ACCESS_HASH).trim().toLowerCase();
+  const got = String(request.headers.get('x-access-key') || '').trim().toLowerCase();
+  return !!got && got === expect;
+}
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -335,6 +344,9 @@ export default {
         const c = conf(env);
         if (path === '/api/health') {
           return json({ ok: true, service: 'sample-check-pages', time: Date.now(), secret: !!c.appSecret });
+        }
+        if (!keyOk(env, request)) {
+          return json({ ok: false, error: '需要访问密码', needAuth: true }, 401);
         }
         if (path === '/api/list' || path === '/api/search') return await handleList(c, request);
         if (path === '/api/create') return await handleCreate(c, request);
