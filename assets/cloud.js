@@ -742,9 +742,10 @@
       });
     }
 
-    /* Excel / JSON 批量导入：新增与更新过的记录都入队 */
-    function syncAfterImport(ret) {
+    /* Excel / JSON 批量导入：新增与更新过的记录都入队（before 为导入前快照，由调用方传入） */
+    function syncAfterImport(ret, before) {
       if (suspend !== 0) return ret;
+      before = before || {};
       localList().forEach(function (r) {
         var wire = JSON.stringify(toWire(r));
         if (before[r.id] !== wire) {
@@ -757,13 +758,13 @@
     Store.importRows = function () {
       var before = {};
       localList().forEach(function (r) { before[r.id] = JSON.stringify(toWire(r)); });
-      return syncAfterImport(_impRows.apply(Store, arguments));
+      return syncAfterImport(_impRows.apply(Store, arguments), before);
     };
     var _impJSON = Store.importJSON;
     Store.importJSON = function () {
       var before = {};
       localList().forEach(function (r) { before[r.id] = JSON.stringify(toWire(r)); });
-      return syncAfterImport(_impJSON.apply(Store, arguments));
+      return syncAfterImport(_impJSON.apply(Store, arguments), before);
     };
 
     /* 演示数据只留本地，不写进飞书 */
