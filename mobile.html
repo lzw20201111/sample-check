@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<title>试件送检清单｜手机版</title>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,-apple-system,"PingFang SC"}
+body{background:#f4f6f8;padding-bottom:90px;color:#222;}
+.topbar{
+  background:#fff;height:50px;display:flex;align-items:center;
+  padding:0 14px;border-bottom:1px solid #e5e7eb;position:sticky;top:0;z-index:10;
+}
+.topbar .title{font-weight:600;font-size:16px;}
+.topbar-right{margin-left:auto;display:flex;gap:8px;}
+.btn{
+  border:none;border-radius:6px;padding:7px 10px;font-size:13px;cursor:pointer;
+  background:#f2f5f8;border:1px solid #d0d5dd;
+}
+.btn-primary{background:#2563eb;color:#fff;border-color:#2563eb;}
+.btn-warn{background:#f97316;color:#fff;border-color:#f97316;}
+.btn-success{background:#16a34a;color:#fff;border-color:#16a34a;}
+
+.toolbar{
+  padding:12px;display:flex;gap:8px;flex-wrap:wrap;background:#fff;border-bottom:1px solid #eee;
+}
+.search-input{
+  flex:1;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:14px;min-width:120px;
+}
+.filter-select{padding:8px;border:1px solid #ddd;border-radius:6px;font-size:14px;}
+
+.stat-row{
+  display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;padding:12px;
+}
+.stat-card{background:#fff;padding:10px;border-radius:8px;text-align:center;}
+.stat-card .num{font-size:20px;font-weight:bold;}
+.stat-card .label{font-size:12px;color:#666;}
+.green{color:#16a34a;}
+.orange{color:#f59e0b;}
+.blue{color:#2563eb;}
+
+/* 扫码模块置顶 */
+.scan-wrap{
+  background:#fff;margin:12px;border-radius:10px;padding:12px;
+}
+.scan-box{
+  position:relative;background:#000;border-radius:8px;overflow:hidden;aspect-ratio:4/3;
+}
+.scan-box video{width:100%;height:100%;object-fit:cover;display:none;}
+.scan-placeholder{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#aaa;gap:8px;}
+.scan-frame{
+  position:absolute;inset:12px;border:2px solid rgba(37,99,235,0.7);border-radius:8px;pointer-events:none;display:none;
+}
+.scan-result{margin-top:10px;padding:10px;background:#f7fafc;border-radius:8px;}
+.scan-result .code{font-size:16px;font-weight:bold;}
+.scan-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
+
+/* 试件卡片列表 */
+.list-wrap{padding:0 12px;}
+.item-card{
+  background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;border:1px solid #eef0f3;
+}
+.item-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+.item-code{font-weight:bold;font-size:16px;}
+.tag{padding:3px 8px;border-radius:12px;font-size:12px;}
+.tag-green{background:#e6f7ee;color:#16a34a;}
+.tag-orange{background:#fff7e6;color:#f59e0b;}
+.item-body{display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px;color:#444;}
+.item-footer{margin-top:10px;display:flex;justify-content:space-between;align-items:center;}
+.checkbox{width:22px;height:22px;accent-color:#2563eb;}
+.del-btn{color:#dc2626;background:none;border:none;font-size:13px;}
+
+/* 弹窗适配手机 */
+.modal-mask{
+  position:fixed;inset:0;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;z-index:100;
+}
+.modal-mask.show{display:flex;}
+.modal{
+  width:calc(100% - 24px);background:#fff;border-radius:10px;padding:16px;max-height:90vh;overflow-y:auto;
+}
+.modal h3{margin-bottom:12px;}
+.modal label{display:block;font-size:13px;margin:8px 0 3px;color:#444;}
+.modal input{width:100%;padding:9px;border:1px solid #ddd;border-radius:6px;font-size:16px;}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;}
+
+.canvas{display:none;}
+.bottom-bar{
+  position:fixed;bottom:0;left:0;right:0;height:62px;background:#fff;border-top:1px solid #e5e7eb;
+  display:flex;align-items:center;justify-content:space-around;padding:0 10px;gap:8px;
+}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="title">试件送检清单【手机版】</div>
+  <div class="topbar-right">
+    <button class="btn btn-primary" onclick="openAddModal()">新增</button>
+  </div>
+</div>
+
+<div class="toolbar">
+  <input id="keyword" class="search-input" placeholder="试件编号搜索" />
+  <select id="filterStatus" class="filter-select">
+    <option value="all">全部</option>
+    <option value="checked">已确认</option>
+    <option value="wait">待核验</option>
+  </select>
+  <button class="btn" onclick="searchData()">查找</button>
+</div>
+
+<div class="stat-row">
+  <div class="stat-card">
+    <div class="num blue" id="totalNum">0</div>
+    <div class="label">总数</div>
+  </div>
+  <div class="stat-card">
+    <div class="num green" id="checkedNum">0</div>
+    <div class="label">已确认</div>
+  </div>
+  <div class="stat-card">
+    <div class="num orange" id="waitNum">0</div>
+    <div class="label">待核验</div>
+  </div>
+</div>
+
+<div class="scan-wrap">
+  <h4 style="margin-bottom:10px;">📷 扫码核验</h4>
+  <div class="scan-box">
+    <video id="video" autoplay playsinline></video>
+    <div class="scan-placeholder" id="scanPlaceholder">点击开始扫码</div>
+    <div class="scan-frame" id="scanFrame"></div>
+  </div>
+  <div class="scan-result">
+    <p style="font-size:12px;color:#666;">识别编号</p>
+    <div class="code" id="scanCode">—</div>
+  </div>
+  <div class="scan-actions">
+    <button class="btn btn-primary" id="scanBtn" onclick="openScan()">开始扫码</button>
+    <button class="btn" id="stopBtn" onclick="closeScan()" style="display:none;">关闭</button>
+    <button class="btn btn-success" onclick="confirmScan()">确认核验</button>
+  </div>
+</div>
+
+<div class="list-wrap" id="cardList"></div>
+
+<div class="bottom-bar">
+  <button class="btn btn-warn" onclick="archiveSelected()">归档选中</button>
+  <button class="btn" onclick="window.open('archive.html','_blank')">归档库</button>
+  <button class="btn" onclick="exportCSV()">导出CSV</button>
+</div>
+
+<canvas id="canvas" class="canvas"></canvas>
+
+<!-- 新增弹窗 -->
+<div class="modal-mask" id="addModal">
+  <div class="modal">
+    <h3>新增送检记录</h3>
+    <label>试件编号</label>
+    <input id="fCode" placeholder="试件编号">
+    <label>工程名称</label>
+    <input id="fProject" placeholder="工程名称">
+    <label>规格型号</label>
+    <input id="fSpec" placeholder="C30 150×150">
+    <label>养护类型</label>
+    <input id="fCureType" placeholder="标养/同养">
+    <label>成型日期</label>
+    <input id="fFormDate" type="date">
+    <label>送检日期</label>
+    <input id="fSendDate" type="date">
+    <label>芯片号1</label>
+    <input id="fChip1">
+    <label>芯片号2</label>
+    <input id="fChip2">
+    <label>芯片号3</label>
+    <input id="fChip3">
+    <div class="modal-actions">
+      <button class="btn" onclick="closeAddModal()">取消</button>
+      <button class="btn btn-primary" onclick="addRow()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let dataList = JSON.parse(localStorage.getItem("sampleCheckList")) || [];
+  let archiveList = JSON.parse(localStorage.getItem("sampleArchiveList")) || [];
+  let scanStream = null;
+  const video = document.getElementById("video");
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+
+  function saveData() {localStorage.setItem("sampleCheckList", JSON.stringify(dataList));}
+  function saveArchive(){localStorage.setItem("sampleArchiveList", JSON.stringify(archiveList));}
+
+  function renderCardList(){
+    const keyword = document.getElementById("keyword").value.trim().toLowerCase();
+    const filter = document.getElementById("filterStatus").value;
+    const wrap = document.getElementById("cardList");
+    wrap.innerHTML="";
+    const filtered = dataList.map((item,idx)=>({item,idx})).filter(({item})=>{
+      if(filter==="checked" && !item.checked) return false;
+      if(filter==="wait" && item.checked) return false;
+      if(keyword && !item.code.toLowerCase().includes(keyword)) return false;
+      return true;
+    });
+    if(filtered.length===0){
+      wrap.innerHTML = `<div style="text-align:center;padding:30px;color:#777;">暂无试件记录</div>`;
+    }
+    filtered.forEach(({item,idx})=>{
+      const card = document.createElement("div");
+      card.className="item-card";
+      card.innerHTML=`
+      <div class="item-head">
+        <div class="item-code">${item.code||""}</div>
+        <span class="${item.checked?'tag tag-green':'tag tag-orange'}">${item.checked?"已确认":"待核验"}</span>
+      </div>
+      <div class="item-body">
+        <div>工程：${item.project||""}</div>
+        <div>规格：${item.spec||""}</div>
+        <div>养护：${item.cureType||""}</div>
+        <div>成型：${item.formDate||""}</div>
+        <div>送检：${item.sendDate||""}</div>
+        <div>芯片1：${item.chip1||""}</div>
+        <div>芯片2：${item.chip2||""}</div>
+        <div>芯片3：${item.chip3||""}</div>
+      </div>
+      <div class="item-footer">
+        <label><input type="checkbox" class="checkbox row-checkbox" data-idx="${idx}"> 选中归档</label>
+        <button class="del-btn" onclick="deleteRow(${idx})">删除</button>
+      </div>
+      `;
+      wrap.appendChild(card);
+    })
+    renderStats();
+  }
+
+  function renderStats(){
+    document.getElementById("totalNum").textContent = dataList.length;
+    document.getElementById("checkedNum").textContent = dataList.filter(i=>i.checked).length;
+    document.getElementById("waitNum").textContent = dataList.filter(i=>!i.checked).length;
+  }
+
+  function archiveSelected(){
+    const selected = [];
+    document.querySelectorAll(".row-checkbox:checked").forEach(cb=>{
+      const idx = Number(cb.dataset.idx);
+      selected.push(idx);
+    })
+    if(selected.length===0){alert("勾选要归档的试件");return;}
+    selected.sort((a,b)=>b-a).forEach(idx=>{
+      archiveList.push(dataList[idx]);
+      dataList.splice(idx,1);
+    })
+    saveData();saveArchive();renderCardList();
+    alert(`归档${selected.length}条记录`);
+  }
+
+  function openAddModal(){
+    document.getElementById("addModal").classList.add("show");
+    const today = new Date().toISOString().slice(0,10);
+    if(!document.getElementById("fFormDate").value) document.getElementById("fFormDate").value = today;
+    if(!document.getElementById("fSendDate").value) document.getElementById("fSendDate").value = today;
+  }
+  function closeAddModal(){document.getElementById("addModal").classList.remove("show");}
+
+  function addRow(){
+    const code = document.getElementById("fCode").value.trim();
+    const project = document.getElementById("fProject").value.trim();
+    const spec = document.getElementById("fSpec").value.trim();
+    const cureType = document.getElementById("fCureType").value.trim();
+    const formDate = document.getElementById("fFormDate").value;
+    const sendDate = document.getElementById("fSendDate").value;
+    const chip1 = document.getElementById("fChip1").value.trim();
+    const chip2 = document.getElementById("fChip2").value.trim();
+    const chip3 = document.getElementById("fChip3").value.trim();
+    if(!code){alert("试件编号不能为空");return;}
+    if(dataList.some(x=>x.code===code)){alert("试件编号已存在");return;}
+    dataList.push({code,project,spec,cureType,formDate,sendDate,chip1,chip2,chip3,checked:false});
+    saveData();renderCardList();closeAddModal();
+    document.getElementById("fCode").value="";document.getElementById("fProject").value="";document.getElementById("fSpec").value="";
+    document.getElementById("fCureType").value="";document.getElementById("fFormDate").value="";document.getElementById("fSendDate").value="";
+    document.getElementById("fChip1").value="";document.getElementById("fChip2").value="";document.getElementById("fChip3").value="";
+  }
+  function deleteRow(idx){
+    if(!confirm("删除这条试件？"))return;
+    dataList.splice(idx,1);
+    saveData();renderCardList();
+  }
+  function searchData(){renderCardList();}
+
+  function openScan(){
+    const ph = document.getElementById("scanPlaceholder");
+    ph.style.display="none";video.style.display="block";
+    document.getElementById("scanFrame").style.display="block";
+    document.getElementById("scanBtn").style.display="none";
+    document.getElementById("stopBtn").style.display="inline-block";
+    navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}})
+    .then(stream=>{
+      scanStream = stream;
+      video.srcObject = stream;
+      scanLoop();
+    }).catch(e=>{alert("无法打开摄像头，需要HTTPS");closeScan();})
+  }
+  function closeScan(){
+    if(scanStream) scanStream.getTracks().forEach(t=>t.stop());
+    scanStream=null;
+    video.style.display="none";
+    document.getElementById("scanPlaceholder").style.display="flex";
+    document.getElementById("scanFrame").style.display="none";
+    document.getElementById("scanBtn").style.display="inline-block";
+    document.getElementById("stopBtn").style.display="none";
+  }
+  function scanLoop(){
+    if(!scanStream) return;
+    canvas.width = video.videoWidth||480;canvas.height=video.videoHeight||640;
+    ctx.drawImage(video,0,0,canvas.width,canvas.height);
+    const imgData = ctx.getImageData(0,0,canvas.width,canvas.height);
+    const qr = jsQR(imgData.data,canvas.width,canvas.height);
+    if(qr){
+      document.getElementById("scanCode").textContent = qr.data;
+      document.getElementById("keyword").value = qr.data;
+      let cnt = Number(localStorage.getItem("scanCount")||0);
+      localStorage.setItem("scanCount",cnt+1);
+      closeScan();return;
+    }
+    requestAnimationFrame(scanLoop);
+  }
+  function confirmScan(){
+    const code = document.getElementById("scanCode").textContent;
+    if(code==="—"){alert("请扫码");return;}
+    const idx = dataList.findIndex(i=>i.code===code);
+    if(idx===-1){alert("找不到试件编号");return;}
+    dataList[idx].checked=true;
+    saveData();renderCardList();
+    alert(`核验完成：${code}`);
+  }
+  function exportCSV(){
+    if(dataList.length===0){alert("暂无数据");return;}
+    let text = "序号,试件编号,工程名称,规格型号,养护类型,成型日期,送检日期,芯片号1,芯片号2,芯片号3,核验状态\n";
+    dataList.forEach((item,i)=>{
+      text += `${i+1},${item.code||""},${item.project||""},${item.spec||""},${item.cureType||""},${item.formDate||""},${item.sendDate||""},${item.chip1||""},${item.chip2||""},${item.chip3||""},${item.checked?"已确认":"待核验"}\n`;
+    })
+    const blob = new Blob(["\uFEFF"+text],{type:"text/csv;charset=utf-8"});
+    const a = document.createElement("a");
+    a.href=URL.createObjectURL(blob);a.download="试件送检清单_手机版.csv";a.click();
+  }
+  document.getElementById("keyword").addEventListener("input",renderCardList);
+  document.getElementById("filterStatus").addEventListener("change",renderCardList);
+  renderCardList();
+</script>
+</body>
+</html>
