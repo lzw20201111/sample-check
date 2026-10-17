@@ -535,9 +535,9 @@
         return /\d\.0+$/.test(s) ? s.replace(/\.0+$/, '') : s; /* CH-0001.0 → CH-0001 */
       }
 
-      var base = read(), added = 0, skipped = 0;
+      var base = read(), added = 0, updated = 0;
       var keys = {};
-      base.forEach(function (b) { keys[keyOf(normalize(b))] = true; });
+      base.forEach(function (b) { keys[keyOf(normalize(b))] = b; });
       for (var i = headIdx + 1; i < rows.length; i++) {
         var row = rows[i] || [];
         function cell(key) {
@@ -557,16 +557,46 @@
           status: (cell('status') === '已核实' || cell('status') === '已确认') ? STATUS.DONE : STATUS.PENDING
         });
         var kk = keyOf(rec);
-        if (keys[kk]) { skipped++; continue; }
-        keys[kk] = true;
+        if (keys[kk]) {
+          /* 重复记录不再跳过：用 Excel 里的非空字段更新已有记录 */
+          var ex = keys[kk], touched = false;
+          ['examType', 'project', 'part', 'grade', 'spec', 'cure', 'madeDate', 'age', 'temp',
+            'sendDate', 'chip1', 'chip2', 'chip3', 'remark'].forEach(function (f) {
+            if (rec[f] !== '' && rec[f] !== undefined && ex[f] !== rec[f]) { ex[f] = rec[f]; touched = true; }
+          });
+          if (idx.status >= 0 && cell('status') && ex.status !== rec.status) { ex.status = rec.status; touched = true; }
+          if (touched) { ex.updatedAt = Date.now(); updated++; }
+          continue;
+        }
+        keys[kk] = rec;
         rec.id = uid(); rec.createdAt = Date.now(); rec.updatedAt = Date.now();
         base.push(rec); added++;
       }
       if (!write(base)) return { ok: false, msg: '写入失败' };
-      return { ok: true, added: added, skipped: skipped, msg: '导入完成：新增 ' + added + ' 条' + (skipped ? '，跳过重复 ' + skipped + ' 条' : '') };
+      var parts = [];
+      if (added) parts.push('新增 ' + added + ' 条');
+      if (updated) parts.push('更新重复 ' + updated + ' 条');
+      if (!parts.length) parts.push('没有需要导入的内容');
+      return { ok: true, added: added, updated: updated, skipped: 0, msg: '导入完成：' + parts.join('，') };
     },
 
     clear: function () { return write([]); },
+
+    /* 芯片号重复统计：返回 { 规范化芯片号: 出现次数 }（不含已归档；>1 即重复） */
+    dupChips: function () {
+      var m = {};
+      read().forEach(function (r0) {
+        if (r0.archived === true || r0.archived === 'true') return;
+        var r = normalize(r0);
+        [r.chip1, r.chip2, r.chip3].forEach(function (c) {
+          if (!c) return;
+          var k = Store.normCode(c);
+          if (!k) return;
+          m[k] = (m[k] || 0) + 1;
+        });
+      });
+      return m;
+    },
 
     seed: function () {
       if (read().length) return 0;
