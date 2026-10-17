@@ -405,10 +405,9 @@
       return { ok: true, added: added, skipped: skipped, msg: '导入完成：新增 ' + added + ' 条' + (skipped ? '，跳过重复 ' + skipped + ' 条' : '') };
     },
 
-    /* rows: 二维数组，第一行为表头 */
+    /* rows: 二维数组。兼容三种情况：首行即表头；导出文件带大标题行（真表头在 2~10 行内）；日期/数字为 Excel 序列号 */
     importRows: function (rows) {
       if (!rows || rows.length < 2) return { ok: false, msg: '表格里没有数据行' };
-      var head = rows[0].map(function (h) { return String(h || '').replace(/\s/g, ''); });
       var map = {
         examType: ['检测类型', '试件编号', '检测项目', '类型'],
         project: ['工程名称', '项目名称', '工程'],
@@ -426,6 +425,21 @@
         status: ['状态', '核验状态', '核验'],
         remark: ['备注', '说明']
       };
+      var allAlias = [];
+      for (var mk in map) allAlias = allAlias.concat(map[mk]);
+      /* 在前 10 行里找表头行：命中已知列名最多的那一行 */
+      var headIdx = 0, headScore = -1;
+      for (var hi = 0; hi < Math.min(10, rows.length); hi++) {
+        var hr = (rows[hi] || []).map(function (h) { return String(h || '').replace(/\s/g, ''); });
+        var sc = 0;
+        for (var ci = 0; ci < hr.length; ci++) {
+          if (hr[ci] && allAlias.indexOf(hr[ci]) >= 0) sc++;
+        }
+        if (sc > headScore) { headScore = sc; headIdx = hi; }
+        if (sc >= 3) break; /* 命中 3 列以上即可确定 */
+      }
+      if (headScore < 2) return { ok: false, msg: '没识别到「检测类型」或「工程名称」列，请检查表头' };
+      var head = (rows[headIdx] || []).map(function (h) { return String(h || '').replace(/\s/g, ''); });
       function col(key) {
         for (var i = 0; i < head.length; i++) {
           if (map[key].indexOf(head[i]) >= 0) return i;
@@ -434,18 +448,43 @@
       }
       var idx = {};
       for (var k in map) idx[k] = col(k);
-      if (idx.examType < 0 && idx.project < 0) return { ok: false, msg: '没识别到「检测类型」或「工程名称」列，请检查表头' };
+
+      /* 单元格清洗：去掉 Excel 数字尾巴（3884200717.0 → 3884200717）；日期序列号 46303 → 2026-10-01 */
+      function cellRaw(row, key) {
+        var j = idx[key];
+        if (j < 0) return '';
+        var val = row[j];
+        return val === null || val === undefined ? '' : String(val).trim();
+      }
+      function cleanDate(s) {
+        s = String(s || '').trim();
+        var m = /^(\d{4})[\/\-.年](\d{1,2})[\/\-.月](\d{1,2})日?$/.exec(s);
+        if (m) return m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
+        if (/^\d{5}(\.\d+)?$/.test(s)) { /* Excel 日期序列号（1900 体系） */
+          var n = Math.floor(parseFloat(s));
+          return fmtDate(Date.UTC(1899, 11, 30) + n * 86400000);
+        }
+        return s;
+      }
+      function cleanNum(s) {
+        s = String(s || '').trim();
+        if (/^-?\d+(\.\d+)?([eE]\+?\d+)?$/.test(s)) {
+          var f = parseFloat(s);
+          if (isFinite(f) && Math.abs(f - Math.round(f)) < 1e-9) return String(Math.round(f));
+        }
+        return /\d\.0+$/.test(s) ? s.replace(/\.0+$/, '') : s; /* CH-0001.0 → CH-0001 */
+      }
 
       var base = read(), added = 0, skipped = 0;
       var keys = {};
       base.forEach(function (b) { keys[keyOf(normalize(b))] = true; });
-      for (var i = 1; i < rows.length; i++) {
+      for (var i = headIdx + 1; i < rows.length; i++) {
         var row = rows[i] || [];
         function cell(key) {
-          var j = idx[key];
-          if (j < 0) return '';
-          var val = row[j];
-          return val === null || val === undefined ? '' : String(val).trim();
+          var v = cellRaw(row, key);
+          if (key === 'madeDate' || key === 'sendDate') return cleanDate(v);
+          if (key === 'chip1' || key === 'chip2' || key === 'chip3' || key === 'age' || key === 'temp') return cleanNum(v);
+          return v;
         }
         if (!cell('examType') && !cell('project')) continue;
         var rec = normalize({
