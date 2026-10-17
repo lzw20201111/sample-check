@@ -62,6 +62,22 @@ Cloudflare Worker 中转（sample-check-worker）
 3. 编号未被登记时提示「➕ 登记为新试件」，点一下自动把该芯片号填进新增表单，保存即入飞书；
 4. 长串内容（如 `XYZ-3884100381-QR`）会自动提取其中包含的芯片号。
 
+## 免费域名：Cloudflare Pages（推荐，国内可直连，0 成本）
+
+`*.workers.dev` 在国内被阻断，`*.pages.dev` 实测可解析可访问，且 Pages 能把**静态站和 /api 放在同一个域名**下，不需要买域名、不需要备案。
+
+仓库根目录的 `_worker.js` 就是 Pages「高级模式」入口：`/api/*` 走飞书中转，其余请求交给静态资源（找不到回退 `index.html`）。
+
+部署（网页操作，2 分钟）：
+
+1. Cloudflare 控制台 → **Workers & Pages** → **创建** → **Pages** → **上传资产**；
+2. 项目名填 `sample-check`（决定域名 `sample-check.pages.dev`），上传 `sample-check-pages.zip`；
+3. 项目 **Settings → 变量和机密** 添加 `FEISHU_APP_SECRET`（飞书应用密钥），保存后**重新部署**一次；
+4. 访问 `https://sample-check.pages.dev/api/health`，返回 `{"ok":true,"secret":true}` 即成功；
+5. 手机/电脑直接打开 `https://sample-check.pages.dev/mobile.html`，同源调用接口，无需任何设置。
+
+若项目名不是 `sample-check`，把 `assets/cloud.js` 里 `DEFAULT_ENDPOINTS` 的第一条改成实际域名即可。
+
 ## 切换后端地址（国内网络必看）
 
 Cloudflare 默认域名 `*.workers.dev` 在国内经常被阻断（实测本机直连超时）。因此前端支持**多条候选线路自动探测**：
