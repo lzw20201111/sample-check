@@ -59,8 +59,22 @@ Cloudflare Worker 中转（sample-check-worker）
 3. 编号未被登记时提示「➕ 登记为新试件」，点一下自动把该芯片号填进新增表单，保存即入飞书；
 4. 长串内容（如 `XYZ-3884100381-QR`）会自动提取其中包含的芯片号。
 
-## 切换后端地址
+## 切换后端地址（国内网络必看）
 
-默认中转地址写在 `assets/cloud.js` 的 `DEFAULT_API`。
-临时切换：在页面地址后加 `?api=https://你的域名`；
-永久切换：在控制台执行 `SampleCloud.setApi('https://你的域名')`。
+Cloudflare 默认域名 `*.workers.dev` 在国内经常被阻断（实测本机直连超时）。因此前端支持**多条候选线路自动探测**：
+
+1. **页面内改（推荐，最省事）**：长按右下角状态角标（电脑上连点 3 下）→「同步设置」→ 填写中转地址（每行一条）→ 保存并测试。地址存在本机，立即生效，不必重新发版。
+2. **临时切换**：页面地址后加 `?api=https://你的域名`。
+3. **代码默认值**：`assets/cloud.js` 顶部的 `DEFAULT_ENDPOINTS`。
+
+能连上的判定：访问 `/api/health` 返回 `{"ok":true}`。任何一条通就自动记住它；当前线路连不上会自动换下一条重试（`/api/create` 在 Worker 侧按业务键去重，换线路重发不会重复入库）。
+
+要让国内网络稳定访问，推荐给 Worker 绑一个**自己的域名**（Cloudflare 免费套餐即可，不需要备案：域名托管在 Cloudflare、解析到海外节点）：
+
+```
+Cloudflare Dashboard → Workers & Pages → sample-check-worker → Settings → Domains & Routes → Add Custom Domain
+```
+
+绑定后把 `https://api.你的域名.com` 填进「同步设置」即可。
+
+完全没有网络时还可以用「同步设置 → 导出 JSON / 导入 JSON」，通过微信、QQ、U 盘在手机与电脑之间对传数据。
