@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>本次送检｜试件送检清单</title>
+<meta name="theme-color" content="#17588f">
+<meta name="description" content="本次送检批次：从试件送检清单挑选、扫码核验芯片号、实时同步飞书多维表格。">
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/auth.js"></script>
+<style>
+  body { background: #f4f7fb; }
+  .b-hero { background: linear-gradient(135deg,#17588f,#1d6fb0); color: #fff; padding: 14px 16px calc(14px + env(safe-area-inset-top)); }
+  .b-hero-in { max-width: 1180px; margin: 0 auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .b-hero .mark { width: 38px; height: 38px; border-radius: 10px; background: rgba(255,255,255,.18); display: grid; place-items: center; font-weight: 800; font-size: 16px; flex: none; }
+  .b-hero h1 { font-size: 18px; letter-spacing: -.2px; }
+  .b-hero .sub { font-size: 12px; opacity: .82; margin-top: 2px; }
+  .b-hero-act { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+  .b-hero-act .btn { background: rgba(255,255,255,.14); color: #fff; border-color: rgba(255,255,255,.34); }
+  .b-hero-act .btn-pri { background: #fff; color: #17588f; border-color: #fff; font-weight: 700; }
+  .b-wrap { max-width: 1180px; margin: 0 auto; padding: 16px 16px 90px; }
+  .b-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-bottom: 14px; }
+  .b-stat { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; box-shadow: var(--sh); }
+  .b-stat .k { font-size: 11.5px; color: var(--ink-3); font-weight: 600; }
+  .b-stat .v { font-size: 22px; font-weight: 800; letter-spacing: -.5px; margin-top: 2px; }
+  .b-stat.ok .v { color: var(--ok); }
+  .b-stat.warn .v { color: var(--warn); }
+  .b-card { background: #fff; border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--sh); overflow: hidden; }
+  .b-tools { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; background: #fbfcfe; }
+  .b-tabs { display: inline-flex; background: #eef2f7; border-radius: 9px; padding: 3px; gap: 2px; }
+  .b-tabs button { border: 0; background: transparent; padding: 5px 11px; border-radius: 7px; font-size: 12.5px; font-weight: 700; color: var(--ink-3); cursor: pointer; }
+  .b-tabs button.on { background: #fff; color: var(--pri); box-shadow: 0 1px 4px rgba(15,27,45,.12); }
+  .b-tools .grow { flex: 1 1 160px; min-width: 120px; }
+  .b-tools .right { margin-left: auto; display: flex; gap: 7px; flex-wrap: wrap; }
+  .b-row { display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: center; padding: 11px 12px; border-bottom: 1px solid #eef2f7; }
+  .b-row:last-child { border-bottom: 0; }
+  .b-row:hover { background: #fafcff; }
+  .b-row .t1 { font-size: 13.5px; font-weight: 700; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .b-row .grade { font-size: 10.5px; font-weight: 700; color: var(--pri); background: var(--pri-l); padding: 1px 6px; border-radius: 5px; }
+  .b-row .t2 { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
+  .b-row .t3 { font-size: 11.5px; color: var(--ink-3); margin-top: 3px; display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+  .b-row .m-chip { font-size: 11px; background: #eef2f7; color: var(--ink-2); padding: 1px 7px; border-radius: 5px; font-variant-numeric: tabular-nums; }
+  .b-row .acts { display: flex; gap: 6px; align-items: center; }
+  .b-empty { text-align: center; padding: 46px 18px; color: var(--ink-3); font-size: 13px; }
+  .b-empty .ico { font-size: 30px; opacity: .35; }
+  .b-empty h3 { font-size: 15px; color: var(--ink); margin: 8px 0 4px; }
+  .b-empty p { font-size: 12.5px; line-height: 1.7; }
+  .b-tip { font-size: 11.5px; color: var(--ink-4); text-align: center; line-height: 1.8; margin-top: 14px; }
+  .b-tip a { color: var(--pri); }
+  .pick-row { display: flex; gap: 9px; align-items: flex-start; padding: 9px 4px; border-bottom: 1px solid #eef2f7; }
+  .pick-row .l { flex: 1; min-width: 0; }
+  .pick-row .t1 { font-size: 13px; font-weight: 700; }
+  .pick-row .t2 { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
+  .pick-list { max-height: 52vh; overflow: auto; border: 1px solid var(--line); border-radius: 10px; padding: 0 10px; }
+  .pick-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  .pick-bar .n { font-size: 12px; color: var(--ink-3); margin-left: auto; }
+  @media (max-width: 700px) {
+    .b-hero h1 { font-size: 16px; }
+    .b-hero-act { width: 100%; margin-left: 0; }
+    .b-hero-act .btn { flex: 1; }
+    .b-row { grid-template-columns: 22px 1fr; }
+    .b-row .acts { grid-column: 2; justify-content: flex-start; }
+    .b-stats { grid-template-columns: repeat(3,1fr); gap: 8px; }
+    .b-stat { padding: 10px 11px; }
+    .b-stat .v { font-size: 19px; }
+    .b-wrap { padding: 12px 10px 96px; }
+    .b-tools .right { width: 100%; }
+    .b-tools .right .btn { flex: 1; }
+  }
+</style>
+</head>
+<body>
+
+<header class="b-hero">
+  <div class="b-hero-in">
+    <div class="mark">批</div>
+    <div>
+      <h1>本次送检</h1>
+      <div class="sub">从清单挑选 · 扫码核验 · 实时同步飞书</div>
+    </div>
+    <div class="b-hero-act">
+      <button class="btn btn-sm btn-pri" type="button" id="btnPick">＋ 从清单挑选</button>
+      <button class="btn btn-sm" type="button" id="btnScan">📷 扫码核验</button>
+    </div>
+  </div>
+</header>
+
+<main class="b-wrap">
+  <section class="b-stats">
+    <div class="b-stat"><div class="k">本次送检</div><div class="v" id="sTotal">0</div></div>
+    <div class="b-stat ok"><div class="k">已核实</div><div class="v" id="sDone">0</div></div>
+    <div class="b-stat warn"><div class="k">未核实</div><div class="v" id="sPending">0</div></div>
+  </section>
+
+  <section class="b-card">
+    <div class="b-tools">
+      <div class="b-tabs" id="tabs">
+        <button type="button" data-status="" class="on">全部</button>
+        <button type="button" data-status="已核实">已核实</button>
+        <button type="button" data-status="待核实">未核实</button>
+      </div>
+      <input class="inp inp-sm grow" id="q" placeholder="搜索芯片号 / 工程 / 部位">
+      <div class="right">
+        <button class="btn btn-sm" type="button" id="btnRemoveSel">移出选中</button>
+        <button class="btn btn-sm btn-danger" type="button" id="btnClear">清空本批</button>
+        <a class="btn btn-sm" href="desktop.html" id="linkList">返回清单</a>
+      </div>
+    </div>
+    <div id="list"></div>
+  </section>
+
+  <p class="b-tip">
+    加入 / 移出 / 扫码核验都会立即写入飞书多维表格（表内「本次送检」列）。<br>
+    移出只是退出本批次，记录仍在送检清单里；要彻底删除请到 <a href="desktop.html">清单</a> 或 <a href="archive.html">归档库</a> 操作。
+  </p>
+</main>
+
+<!-- 从清单挑选 -->
+<div class="modal" id="pickModal">
+  <div class="modal-box" style="max-width:640px">
+    <div class="modal-h">
+      <h3>从送检清单挑选</h3>
+      <button class="icon-btn x" type="button" data-close="pickModal">✕</button>
+    </div>
+    <div class="modal-b">
+      <div class="pick-bar">
+        <input class="inp inp-sm" id="pickQ" placeholder="搜索芯片号 / 工程 / 部位" style="flex:1;min-width:140px">
+        <button class="btn btn-sm" type="button" id="btnPickAll">全选当前列表</button>
+        <span class="n" id="pickN">已选 0 条</span>
+      </div>
+      <div class="pick-list" id="pickList"></div>
+    </div>
+    <div class="modal-f">
+      <button class="btn" type="button" data-close="pickModal">取消</button>
+      <button class="btn btn-pri" type="button" id="btnPickOk">加入本次送检</button>
+    </div>
+  </div>
+</div>
+
+<!-- 扫码核验 -->
+<div class="modal" id="scanModal">
+  <div class="modal-box" style="max-width:480px">
+    <div class="modal-h">
+      <h3>📷 扫码核验（本次送检）</h3>
+      <button class="icon-btn x" type="button" data-close="scanModal">✕</button>
+    </div>
+    <div class="modal-b">
+      <div class="scan-stage" style="aspect-ratio:3/4">
+        <div class="ph" id="scanPh"><span class="big">📷</span>点击「开始扫码」调用摄像头</div>
+        <video id="video" playsinline muted style="display:none"></video>
+        <div class="scan-frame" id="scanFrame" style="display:none"></div>
+      </div>
+      <div class="scan-code" style="margin-top:12px">
+        <div class="k">当前识别编号</div>
+        <div class="v idle" id="scanCode">—</div>
+      </div>
+      <div class="manual" style="margin-top:10px">
+        <input class="inp inp-sm" id="manualCode" placeholder="也可手动输入芯片号">
+        <button class="btn btn-sm" type="button" id="btnFill">填入</button>
+      </div>
+      <div class="scan-status" id="scanStatus" style="margin-top:8px">摄像头未开启</div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn btn-pri" type="button" id="btnStart" style="flex:1">开始扫码</button>
+        <button class="btn" type="button" id="btnStop">关闭</button>
+        <button class="btn" type="button" id="btnConfirm">确认核验</button>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <button class="btn btn-sm" type="button" id="btnPhoto">📷 拍照识别</button>
+        <button class="btn btn-sm" type="button" id="btnTorch" style="display:none">🔦 补光</button>
+        <button class="btn btn-sm btn-pri" type="button" id="btnNewFromScan" style="display:none">➕ 去登记</button>
+        <input type="file" id="scanFile" accept="image/*" capture="environment" style="display:none">
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="assets/store.js"></script>
+<script src="assets/cloud.js"></script>
+<script src="assets/ui.js"></script>
+<script src="assets/scan.js"></script>
+<script>
+(function () {
+  var Store = window.SampleStore, U = window.UI;
+  var el = function (id) { return document.getElementById(id); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+  var state = { status: '', q: '' };
+  var selected = {}, picked = {};
+
+  if (window.innerWidth < 760) el('linkList').setAttribute('href', 'mobile.html');
+
+  function badge(r) {
+    return r.status === '已核实' ? '<span class="badge ok">已核实</span>' : '<span class="badge warn">未核实</span>';
+  }
+  function chipsHtml(r) {
+    var hit = Store.normCode(r.hitChip);
+    return [r.chip1, r.chip2, r.chip3].filter(Boolean).map(function (c) {
+      var on = hit && Store.normCode(c) === hit;
+      return '<span class="m-chip' + (on ? ' chip-hit' : '') + '">' + U.esc(c) + '</span>';
+    }).join('');
+  }
+
+  function render() {
+    var list = Store.batchAll({ status: state.status, q: state.q });
+    var st = Store.batchStats();
+    el('sTotal').textContent = st.total;
+    el('sDone').textContent = st.done;
+    el('sPending').textContent = st.pending;
+
+    if (!list.length) {
+      var noBatch = st.total === 0;
+      el('list').innerHTML =
+        '<div class="b-empty"><div class="ico">▤</div>' +
+        '<h3>' + (noBatch ? '本次送检还没有试件' : '当前筛选下没有记录') + '</h3>' +
+        '<p>' + (noBatch
+          ? '点右上角「＋ 从清单挑选」，从送检清单里勾选本次要送检的试件。'
+          : '换个筛选条件，或点「＋ 从清单挑选」继续添加。') + '</p>' +
+        (noBatch ? '<div style="margin-top:14px"><button class="btn btn-pri btn-sm" type="button" id="btnPick2">＋ 从清单挑选</button></div>' : '') +
+        '</div>';
+      if (el('btnPick2')) el('btnPick2').onclick = openPick;
+      updateSel();
+      return;
+    }
+
+    el('list').innerHTML = list.map(function (r) {
+      var meta = [];
+      if (r.age !== '') meta.push('龄期 ' + U.esc(r.age) + 'd');
+      if (r.temp !== '') meta.push(U.esc(r.temp) + '℃');
+      if (r.cure) meta.push(U.esc(r.cure));
+      return '<div class="b-row" data-id="' + r.id + '">' +
+        '<input class="chk rowChk" type="checkbox" ' + (selected[r.id] ? 'checked' : '') + '>' +
+        '<div>' +
+          '<div class="t1">' + U.esc(r.examType || '未填检测类型') +
+            (r.grade ? '<span class="grade">' + U.esc(r.grade) + '</span>' : '') + badge(r) + '</div>' +
+          '<div class="t2">' + U.esc(r.project || '—') + (r.part ? ' · ' + U.esc(r.part) : '') +
+            (r.spec ? ' · ' + U.esc(r.spec) : '') + '</div>' +
+          '<div class="t3">' + (chipsHtml(r) || '<span style="color:var(--ink-4)">未登记芯片号</span>') + '</div>' +
+          '<div class="t3">送检 ' + U.esc(r.sendDate || '—') + ' · 成型 ' + U.esc(r.madeDate || '—') +
+            (meta.length ? ' · ' + meta.join(' · ') : '') + '</div>' +
+        '</div>' +
+        '<div class="acts">' +
+          (r.status === '已核实'
+            ? '<span class="badge ok">✓</span>'
+            : '<button class="btn btn-sm btn-pri" type="button" data-act="confirm">核验</button>') +
+          '<button class="btn btn-sm" type="button" data-act="remove" title="移出本次送检">移出</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    bind();
+    updateSel();
+  }
+
+  function bind() {
+    $$('#list .b-row').forEach(function (row) {
+      var id = row.getAttribute('data-id');
+      row.querySelector('.rowChk').onchange = function (e) {
+        if (e.target.checked) selected[id] = true; else delete selected[id];
+        updateSel();
+      };
+      $$('[data-act]', row).forEach(function (b) {
+        b.onclick = function (e) {
+          e.stopPropagation();
+          var act = b.getAttribute('data-act');
+          if (act === 'confirm') {
+            var r = Store.get(id);
+            var chip = r ? (r.chip1 || r.chip2 || r.chip3 || '') : '';
+            if (!chip) { U.toast('该试件没有芯片号，请先在清单里补录', 'err'); return; }
+            var res = Store.confirm(id, chip);
+            if (res) { Store.logScan(chip, true, res.id); U.toast('已核实并同步：' + chip, 'ok'); render(); }
+          } else if (act === 'remove') {
+            if (!confirm('把这条移出本次送检？（记录仍在送检清单里）')) return;
+            Store.removeFromBatch([id]); delete selected[id];
+            U.toast('已移出本次送检', 'ok'); render();
+          }
+        };
+      });
+    });
+  }
+
+  function updateSel() {
+    var n = Object.keys(selected).filter(function (k) { return selected[k]; }).length;
+    el('btnRemoveSel').textContent = n ? '移出选中(' + n + ')' : '移出选中';
+    el('btnRemoveSel').disabled = !n;
+    el('btnRemoveSel').style.opacity = n ? 1 : .5;
+  }
+
+  /* ---------------- 从清单挑选 ---------------- */
+  function openPick() {
+    picked = {};
+    el('pickQ').value = '';
+    renderPick();
+    el('pickModal').classList.add('show');
+  }
+
+  function renderPick() {
+    var q = String(el('pickQ').value || '').trim().toLowerCase();
+    var pool = Store.all({ archived: false }).filter(function (r) { return !r.batch; });
+    if (q) {
+      pool = pool.filter(function (r) {
+        return [r.examType, r.project, r.part, r.grade, r.spec, r.chip1, r.chip2, r.chip3, r.remark]
+          .join(' ').toLowerCase().indexOf(q) >= 0;
+      });
+    }
+    if (!pool.length) {
+      el('pickList').innerHTML = '<div class="b-empty" style="padding:30px 10px"><h3>没有可选的记录</h3><p>' +
+        (Store.all({ archived: false }).length ? '清单里的记录都已加入本次送检。' : '送检清单还是空的，请先到清单录入或导入 Excel。') + '</p></div>';
+      el('pickN').textContent = '已选 0 条';
+      return;
+    }
+    el('pickList').innerHTML = pool.map(function (r) {
+      return '<label class="pick-row">' +
+        '<input class="chk" type="checkbox" data-id="' + r.id + '" ' + (picked[r.id] ? 'checked' : '') + '>' +
+        '<div class="l"><div class="t1">' + U.esc(r.examType || '—') +
+          (r.grade ? ' <span class="grade" style="font-size:10.5px;color:var(--pri);background:var(--pri-l);padding:1px 6px;border-radius:5px">' + U.esc(r.grade) + '</span>' : '') +
+          tag(r) + '</div>' +
+          '<div class="t2">' + U.esc(r.project || '—') + (r.part ? ' · ' + U.esc(r.part) : '') +
+            ' · 送检 ' + U.esc(r.sendDate || '—') + '</div>' +
+          '<div class="t2">' + [r.chip1, r.chip2, r.chip3].filter(Boolean).map(U.esc).join(' / ') + '</div>' +
+        '</div></label>';
+    }).join('');
+    $$('#pickList input.chk').forEach(function (cb) {
+      cb.onchange = function () {
+        var id = cb.getAttribute('data-id');
+        if (cb.checked) picked[id] = true; else delete picked[id];
+        pickN();
+      };
+    });
+    pickN();
+  }
+  function tag(r) {
+    return r.status === '已核实' ? ' <span class="badge ok">已核实</span>' : ' <span class="badge warn">未核实</span>';
+  }
+  function pickN() {
+    var n = Object.keys(picked).filter(function (k) { return picked[k]; }).length;
+    el('pickN').textContent = '已选 ' + n + ' 条';
+  }
+
+  /* ---------------- 扫码 ---------------- */
+  var scanHandle = null, lastCode = '', torchOn = false;
+  var FIELD_CN = { chip1: '芯片号1', chip2: '芯片号2', chip3: '芯片号3' };
+
+  function setCode(c) {
+    lastCode = c || '';
+    var n = el('scanCode');
+    n.textContent = c || '—';
+    n.className = 'v' + (c ? '' : ' idle');
+  }
+  function setStatus(m, cls) {
+    var n = el('scanStatus');
+    n.textContent = m; n.className = 'scan-status' + (cls ? ' ' + cls : '');
+  }
+  function openScan() {
+    el('scanModal').classList.add('show');
+    setCode(''); setStatus('点击「开始扫码」调用摄像头');
+    el('btnNewFromScan').style.display = 'none';
+  }
+  function startScan() {
+    if (scanHandle) { scanHandle.stop(); scanHandle = null; }
+    el('video').style.display = 'block';
+    el('scanPh').style.display = 'none';
+    el('scanFrame').style.display = 'block';
+    el('btnTorch').style.display = 'none';
+    torchOn = false;
+    setStatus('正在启动摄像头…');
+    scanHandle = Scanner.start(el('video'), function (code) {
+      setCode(code);
+      applyScan(code);
+    }, function (s) {
+      if (s === 'running') { setStatus('摄像头已开启，对准芯片', 'ok'); el('btnTorch').style.display = ''; }
+      else if (s === 'denied') setStatus('摄像头权限被拒绝，请允许后重试，或手动输入', 'err');
+      else if (s === 'nocamera') setStatus('没有可用摄像头，请手动输入编号', 'err');
+      else if (s === 'unsupported') setStatus('当前浏览器不支持调用摄像头，请手动输入', 'err');
+      else if (s === 'fallback-manual') setStatus('扫码组件加载失败（需联网），请手动输入', 'err');
+    });
+  }
+  function stopScan() {
+    if (scanHandle) { scanHandle.stop(); scanHandle = null; }
+    el('video').style.display = 'none';
+    el('scanPh').style.display = 'block';
+    el('scanFrame').style.display = 'none';
+    setStatus('摄像头已关闭');
+  }
+  /* 命中即核验；属于清单但不在本批次 → 自动加入并核实；未登记 → 给「去登记」入口 */
+  function applyScan(raw) {
+    var code = Store.normCode(raw);
+    var hit = Store.findChip(code);
+    el('btnNewFromScan').style.display = 'none';
+    if (!hit) {
+      el('btnNewFromScan').textContent = '➕ 去登记 ' + code;
+      el('btnNewFromScan').style.display = '';
+      el('btnNewFromScan').setAttribute('data-code', code);
+      Store.logScan(code, false, '');
+      setStatus('识别到 ' + code + '，芯片号1/2/3 都没有匹配记录 —— 点「去登记」新增，或确认是否拿错了试件', 'err');
+      return null;
+    }
+    var inBatch = hit.rec.batch === true;
+    if (!inBatch) Store.addToBatch([hit.rec.id]);
+    var res = Store.confirm(hit.rec.id, hit.chip);
+    Store.logScan(hit.chip, true, res.id);
+    render();
+    if (inBatch) {
+      setStatus('已核实：命中 ' + (FIELD_CN[hit.field] || '芯片号') + '「' + hit.chip + '」· ' + (res.examType || '') +
+        '（已同步飞书）', 'ok');
+      U.toast('已核实：' + hit.chip, 'ok');
+    } else {
+      setStatus('已加入本次送检并核实：命中 ' + (FIELD_CN[hit.field] || '芯片号') + '「' + hit.chip + '」· ' + (res.examType || '') +
+        '（已同步飞书）', 'ok');
+      U.toast('已加入本次送检并核实：' + hit.chip, 'ok');
+    }
+    return hit;
+  }
+  function doConfirm() {
+    var code = Store.normCode(el('manualCode').value || lastCode);
+    if (!code) { U.toast('请先扫码或输入芯片号', 'err'); return; }
+    setCode(code);
+    applyScan(code);
+  }
+
+  /* ---------------- 事件 ---------------- */
+  el('btnPick').onclick = openPick;
+  el('btnScan').onclick = openScan;
+  el('btnRemoveSel').onclick = function () {
+    var ids = Object.keys(selected).filter(function (k) { return selected[k]; });
+    if (!ids.length) return;
+    if (!confirm('把选中的 ' + ids.length + ' 条移出本次送检？（记录仍在清单里）')) return;
+    Store.removeFromBatch(ids); selected = {};
+    U.toast('已移出 ' + ids.length + ' 条', 'ok'); render();
+  };
+  el('btnClear').onclick = function () {
+    var n = Store.batchStats().total;
+    if (!n) { U.toast('本次送检还是空的', 'err'); return; }
+    if (!confirm('清空本次送检的 ' + n + ' 条？\n\n只是退出本批次，记录仍然保留在送检清单里，不会被删除。')) return;
+    Store.clearBatch(); selected = {};
+    U.toast('已清空本次送检', 'ok'); render();
+  };
+  el('tabs').onclick = function (e) {
+    var b = e.target.closest('button[data-status]');
+    if (!b) return;
+    $$('#tabs button').forEach(function (x) { x.classList.remove('on'); });
+    b.classList.add('on');
+    state.status = b.getAttribute('data-status');
+    render();
+  };
+  var qt = null;
+  el('q').oninput = function () {
+    clearTimeout(qt);
+    qt = setTimeout(function () { state.q = el('q').value; render(); }, 180);
+  };
+  el('pickQ').oninput = renderPick;
+  el('btnPickAll').onclick = function () {
+    var boxes = $$('#pickList input.chk');
+    var allOn = boxes.length && boxes.every(function (b) { return b.checked; });
+    boxes.forEach(function (b) {
+      b.checked = !allOn;
+      var id = b.getAttribute('data-id');
+      if (b.checked) picked[id] = true; else delete picked[id];
+    });
+    pickN();
+  };
+  el('btnPickOk').onclick = function () {
+    var ids = Object.keys(picked).filter(function (k) { return picked[k]; });
+    if (!ids.length) { U.toast('请先勾选要加入的试件', 'err'); return; }
+    var n = Store.addToBatch(ids);
+    el('pickModal').classList.remove('show');
+    picked = {};
+    U.toast(n ? '已加入 ' + n + ' 条到本次送检' : '这些试件已在本次送检里', 'ok');
+    render();
+  };
+
+  el('btnStart').onclick = startScan;
+  el('btnStop').onclick = stopScan;
+  el('btnConfirm').onclick = doConfirm;
+  el('btnFill').onclick = doConfirm;
+  el('btnPhoto').onclick = function () { el('scanFile').value = ''; el('scanFile').click(); };
+  el('scanFile').onchange = function (e) {
+    var f = e.target.files && e.target.files[0];
+    if (!f) return;
+    setStatus('正在识别照片…');
+    Scanner.decodeFile(f).then(function (code) {
+      if (!code) { setStatus('照片里没识别出二维码，靠近一点重拍，或手动输入编号', 'err'); U.toast('未识别出条码', 'err'); return; }
+      setCode(code); applyScan(code);
+    }).catch(function (err) { setStatus(err.message || '照片识别失败', 'err'); });
+  };
+  el('btnNewFromScan').onclick = function () {
+    var code = el('btnNewFromScan').getAttribute('data-code') || lastCode;
+    if (!code) return;
+    location.href = 'mobile.html?add=' + encodeURIComponent(code) + '&batch=1';
+  };
+  el('btnTorch').onclick = function () {
+    if (!scanHandle || !scanHandle.torch) return;
+    torchOn = !torchOn;
+    scanHandle.torch(torchOn).then(function (ok) {
+      if (!ok) { torchOn = false; U.toast('该设备不支持补光', 'err'); }
+      el('btnTorch').textContent = torchOn ? '🔦 关闭补光' : '🔦 补光';
+    });
+  };
+
+  $$('[data-close]').forEach(function (b) {
+    b.onclick = function () {
+      var id = b.getAttribute('data-close');
+      el(id).classList.remove('show');
+      if (id === 'scanModal') stopScan();
+    };
+  });
+  $$('.modal').forEach(function (m) {
+    m.addEventListener('click', function (e) {
+      if (e.target === m) {
+        m.classList.remove('show');
+        if (m.id === 'scanModal') stopScan();
+      }
+    });
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      el('pickModal').classList.remove('show');
+      el('scanModal').classList.remove('show');
+      stopScan();
+    }
+  });
+
+  render();
+  if (window.SampleCloud && SampleCloud.start) SampleCloud.start({ onUpdate: render });
+  document.addEventListener('cloud:updated', render);
+})();
+</script>
+</body>
+</html>
